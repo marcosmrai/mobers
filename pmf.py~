@@ -37,9 +37,7 @@ class ProbabilisticMatrixFactorization():
             items = self.items
             
         sq_error = 0
-
-	# Olhar melhor para vetorizar - INICIO
-
+        
         for rating_tuple in self.ratings:
             if len(rating_tuple) == 3:
                 (i, j, rating) = rating_tuple
@@ -50,8 +48,6 @@ class ProbabilisticMatrixFactorization():
             r_hat = numpy.dot(users[i],items[j])
 
             sq_error += weight * (rating - r_hat)**2
-
-	# Olhar melhor para vetorizar - FIM
 
         L2_norm = numpy.sum(users**2)+numpy.sum(items**2)
 
