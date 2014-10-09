@@ -20,14 +20,9 @@ class ProbabilisticMatrixFactorization():
         self.num_users = int(numpy.max(self.ratings[:, 0]) + 1)
         self.num_items = int(numpy.max(self.ratings[:, 1]) + 1)
         
-        print (self.num_users, self.num_items, self.latent_d)
-        print self.ratings
-
         self.users = numpy.random.random((self.num_users, self.latent_d))
         self.items = numpy.random.random((self.num_items, self.latent_d))
 
-        self.new_users = numpy.random.random((self.num_users, self.latent_d))
-        self.new_items = numpy.random.random((self.num_items, self.latent_d))           
 
 
     def likelihood(self, users=None, items=None):
@@ -36,19 +31,7 @@ class ProbabilisticMatrixFactorization():
         if items is None:
             items = self.items
             
-        sq_error = 0
-        
-        for rating_tuple in self.ratings:
-            if len(rating_tuple) == 3:
-                (i, j, rating) = rating_tuple
-                weight = 1
-            elif len(rating_tuple) == 4:
-                (i, j, rating, weight) = rating_tuple
-            
-            r_hat = numpy.dot(users[i],items[j])
-
-            sq_error += weight * (rating - r_hat)**2
-
+        sq_error = sum([(rating-numpy.dot(users[i],items[j]))**2 for i, j, rating in self.ratings])
         L2_norm = numpy.sum(users**2)+numpy.sum(items**2)
 
         return -sq_error - self.regularization_strength * L2_norm
@@ -59,18 +42,10 @@ class ProbabilisticMatrixFactorization():
         updates_o = numpy.zeros((self.num_users, self.latent_d))
         updates_d = numpy.zeros((self.num_items, self.latent_d))        
 
-        for rating_tuple in self.ratings:
-            if len(rating_tuple) == 3:
-                (i, j, rating) = rating_tuple
-                weight = 1
-            elif len(rating_tuple) == 4:
-                (i, j, rating, weight) = rating_tuple
-            
-            r_hat = numpy.sum(self.users[i] * self.items[j])
-            
-            for d in range(self.latent_d):
-                updates_o[i, d] += self.items[j, d] * (rating - r_hat) * weight
-                updates_d[j, d] += self.users[i, d] * (rating - r_hat) * weight
+        for i, j, rating in self.ratings:
+            r_hat = numpy.sum(self.users[i] * self.items[j])     
+            updates_o[i] += self.items[j] * (rating - r_hat)
+            updates_d[j] += self.users[i] * (rating - r_hat)
 
         while (not self.converged):
             initial_lik = self.likelihood()
@@ -95,31 +70,20 @@ class ProbabilisticMatrixFactorization():
             if self.learning_rate < 1e-10:
                 self.converged = True
 
-        return not self.converged
+        return self.converged
     
 
     def apply_updates(self, updates_o, updates_d):
-        for i in range(self.num_users):
-            for d in range(self.latent_d):
-                self.users[i, d] = self.new_users[i, d]
-
-        for i in range(self.num_items):
-            for d in range(self.latent_d):
-                self.items[i, d] = self.new_items[i, d]                
+	self.users = numpy.copy(self.new_users)
+        self.items = numpy.copy(self.new_items)
 
     
     def try_updates(self, updates_o, updates_d):        
         alpha = self.learning_rate
         beta = -self.regularization_strength
 
-        for i in range(self.num_users):
-            for d in range(self.latent_d):
-                self.new_users[i,d] = self.users[i, d] + \
-                                       alpha * (beta * self.users[i, d] + updates_o[i, d])
-        for i in range(self.num_items):
-            for d in range(self.latent_d):
-                self.new_items[i, d] = self.items[i, d] + \
-                                       alpha * (beta * self.items[i, d] + updates_d[i, d])
+        self.new_users = self.users + alpha * (beta * self.users + updates_o)
+        self.new_items = self.items + alpha * (beta * self.items + updates_d)
         
 
     def undo_updates(self):
@@ -208,7 +172,7 @@ if __name__ == "__main__":
     pmf = ProbabilisticMatrixFactorization(ratings, latent_d=5)
     
     liks = []
-    while (pmf.update()):
+    while (not pmf.update()):
         lik = pmf.likelihood()
         liks.append(lik)
         print "L=", lik
