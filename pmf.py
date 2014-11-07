@@ -4,62 +4,79 @@ import matplotlib.cm as cm
 
 import numpy
 import pickle
+import copy
+import bisect
 
 from dbread import *
 
 class ProbabilisticMatrixFactorization():
 
-    def __init__(self, rating_tuples, latent_d=1):
+    def __init__(self, ratings, latent_d=1,regularization_strength=0.1):
         self.latent_d = latent_d
         self.learning_rate = .0001
-        self.regularization_strength = 0.1
-        
-        self.ratings = numpy.array(rating_tuples).astype(float)
+        self.regularization_strength = regularization_strength
+
         self.converged = False
 
-        self.num_users = int(numpy.max(self.ratings[:, 0]) + 1)
-        self.num_items = int(numpy.max(self.ratings[:, 1]) + 1)
-        
-        self.users = numpy.random.random((self.num_users, self.latent_d))
-        self.items = numpy.random.random((self.num_items, self.latent_d))
+        self.num_users = int(numpy.max(ratings[:, 0]) + 1)
+        self.num_items = int(numpy.max(ratings[:, 1]) + 1)
+
+        self.users = numpy.random.normal(0,0.3,(self.num_users, self.latent_d))
+        self.items = numpy.random.normal(0,0.3,(self.num_items, self.latent_d))
+
+    def updateReg(self,regularization_strength):
+	self.regularization_strength=regularization_strength
+	self.learning_rate = .0001
+	self.converged = False
 
 
+    def getReg(self):
+	return self.regularization_strength
 
-    def likelihood(self, users=None, items=None):
+    def error(self, ratings, users=None, items=None):
         if users is None:
             users = self.users
         if items is None:
             items = self.items
             
-        sq_error = sum([(rating-numpy.dot(users[i],items[j]))**2 for i, j, rating in self.ratings])
+        sq_error = sum([(rating-numpy.dot(users[i],items[j]))**2 for i, j, rating in ratings])
         L2_norm = numpy.sum(users**2)+numpy.sum(items**2)
 
-        return -sq_error - self.regularization_strength * L2_norm
+        return (1-self.regularization_strength)*sq_error + self.regularization_strength * L2_norm
         
+    def objErrors(self, ratings, users=None, items=None):
+        if users is None:
+            users = self.users
+        if items is None:
+            items = self.items
+            
+        sq_error = sum([(rating-numpy.dot(users[i],items[j]))**2 for i, j, rating in ratings])
+        L2_norm = numpy.sum(users**2)+numpy.sum(items**2)
+
+        return np.array([sq_error,L2_norm])
         
-    def update(self):
+    def update(self, ratings):
 
         grad_o = numpy.zeros((self.num_users, self.latent_d))
         grad_d = numpy.zeros((self.num_items, self.latent_d))        
 
-        for i, j, rating in self.ratings:
-            r_hat = numpy.sum(self.users[i] * self.items[j])     
-            grad_o[i] += self.items[j] * (rating - r_hat)
-            grad_d[j] += self.users[i] * (rating - r_hat)
+        for i, j, rating in ratings:
+            r_hat = numpy.sum(self.users[i] * self.items[j])
+            grad_o[i] += self.items[j] * (r_hat - rating)
+            grad_d[j] += self.users[i] * (r_hat - rating)
 
         while (not self.converged):
-            initial_lik = self.likelihood()
+            initial_lik = self.error(ratings)
 
-            print "  setting learning rate =", self.learning_rate
             self.try_updates(grad_o, grad_d)
 
-            final_lik = self.likelihood(self.new_users, self.new_items)
+            final_lik = self.error(ratings,self.new_users, self.new_items)
 
-            if final_lik > initial_lik:
+            if final_lik < initial_lik:
                 self.apply_updates(grad_o, grad_d)
                 self.learning_rate *= 1.25
 
-                if final_lik - initial_lik < .1:
+                if initial_lik - final_lik < .001:
                     self.converged = True
                     
                 break
@@ -80,10 +97,10 @@ class ProbabilisticMatrixFactorization():
     
     def try_updates(self, grad_o, grad_d):        
         alpha = self.learning_rate
-        beta = -self.regularization_strength
+        lambd = self.regularization_strength
 
-        self.new_users = self.users + alpha * (beta * self.users + grad_o)
-        self.new_items = self.items + alpha * (beta * self.items + grad_d)
+        self.new_users = self.users - alpha * ((1-lambd)*grad_o + lambd * self.users)
+        self.new_items = self.items - alpha * ((1-lambd)*grad_d + lambd * self.items)
         
 
     def undo_updates(self):
@@ -110,7 +127,14 @@ class ProbabilisticMatrixFactorization():
     def save_latent_vectors(self, prefix):
         self.users.dump(prefix + "%sd_users.pickle" % self.latent_d)
         self.items.dump(prefix + "%sd_items.pickle" % self.latent_d)
-    
+
+    def gradient_descent(self, ratings):
+	liks=[]
+        while (not self.update(ratings)):
+            lik = self.error(ratings)
+            liks.append(lik)
+            pass
+        return liks
 
 def plot_ratings(ratings):
     xs = []
@@ -159,6 +183,58 @@ def plot_predicted_ratings(U, V):
     plt.title("Predicted Ratings")
     plt.axis("off")
 
+def nise(ratings):
+	hVError=0.005
+	init={}
+	pmf1 =ProbabilisticMatrixFactorization(ratings, latent_d=5,regularization_strength=0.9)
+	pmf1.gradient_descent(ratings)
+
+	pmf0 = copy.copy(pmf1)
+	pmf0.updateReg(regularization_strength=0.0)
+	pmf0.gradient_descent(ratings)
+
+	init={'N1':pmf1,'N1e':pmf1.objErrors(ratings),'N2':pmf0,'N2e':pmf0.objErrors(ratings)}
+	norm=[(init['N2e'][0]-init['N1e'][0]),(init['N2e'][1]-init['N1e'][1])]
+	init['err']=((init['N2e'][0]-init['N1e'][0])/norm[0]*(init['N2e'][1]-init['N1e'][1])/norm[1])
+	efList=[init]
+
+	out=[pmf1,pmf0]
+
+	itera=1
+
+	while efList!=[]:
+		actual=efList.pop(0)
+		if actual['err']>hVError and abs(actual['N1'].getReg()-actual['N2'].getReg())>10**-2 and itera<100:
+			actual['reg']=-(actual['N1e'][0]-actual['N2e'][0])/(actual['N1e'][1]-actual['N2e'][1])
+			actual['reg']=actual['reg']/(actual['reg']+1)
+			alpha=np.random.random()
+			#actual['reg']=alpha*actual['N2'].getReg()+(1-alpha)*actual['N1'].getReg()
+			actual['sol']=copy.copy(actual['N2'])
+			actual['sol'].updateReg(regularization_strength=actual['reg'])
+			actual['sol'].gradient_descent(ratings)
+
+			out.append(actual['sol'])
+
+			next={'N1':actual['sol'],'N1e':actual['sol'].objErrors(ratings),'N2':actual['N2'],'N2e':actual['N2e']}
+			next['err']=((next['N2e'][0]-next['N1e'][0])/norm[0]*(next['N2e'][1]-next['N1e'][1])/norm[1])
+
+			efList.append(next)
+
+			next={'N1':actual['N1'],'N1e':actual['N1e'],'N2':actual['sol'],'N2e':actual['sol'].objErrors(ratings)}
+			next['err']=((next['N2e'][0]-next['N1e'][0])/norm[0]*(next['N2e'][1]-next['N1e'][1])/norm[1])
+
+			efList.append(next)
+	
+			itera+=1
+
+	return out
+
+def plotPareto(list_,ratings):
+    plotL=np.array([i.objErrors(ratings) for i in list_])
+    print plotL.shape
+    plt.plot(plotL[:,0],plotL[:,1],'o')
+    plt.show()
+
 
 if __name__ == "__main__":
 
@@ -167,25 +243,32 @@ if __name__ == "__main__":
     if DATASET == 'fake':
         (ratings, true_o, true_d) = fake_ratings()
 
+    ratings = numpy.array(ratings).astype(float)
+
     #plot_ratings(ratings)
 
-    pmf = ProbabilisticMatrixFactorization(ratings, latent_d=5)
-    
+    out=nise(ratings)
+    plotPareto(out,ratings)
+    '''
+    pmf = ProbabilisticMatrixFactorization(ratings, latent_d=5)    
     liks = []
-    while (not pmf.update()):
-        lik = pmf.likelihood()
-        liks.append(lik)
-        print "L=", lik
-        pass
+    #while (not pmf.update()):
+    #    lik = pmf.error()
+    #    liks.append(lik)
+    #    print "L=", lik
+    #    pass
+    liks=pmf.gradient_descent(ratings)
     
     plt.figure()
     plt.plot(liks)
     plt.xlabel("Iteration")
-    plt.ylabel("Log Likelihood")
+    plt.ylabel("Log Error")
 
     plot_latent_vectors(pmf.users, pmf.items)
     plot_predicted_ratings(pmf.users, pmf.items)
     plt.show()
 
     pmf.print_latent_vectors()
+
     pmf.save_latent_vectors("models/")
+    '''
