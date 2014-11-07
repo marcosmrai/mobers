@@ -34,7 +34,13 @@ def read_ratings(filename):
         ratings = [tuple([int(elem) for elem in line.split('\t')[0:-1]]) \
                    for line in f]
     return ratings
-            
+    
+def read_user_ratings(filename, user_id):
+    user_hash = {}    
+    with open(filename, 'r') as f:
+        user_ratings = [(int(line.split()[1]), int(line.split()[2]) \
+        for line in f if int(line.split()[0])==user_id]                
+    return user_ratings
             
 if __name__=='__main__':
     print read_ratings('ml-100k/u.data')
