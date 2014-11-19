@@ -33,13 +33,14 @@ def read_ratings(filename):
         # base is in format: user_ID  item_ID  rating (tab separated)
         ratings = [tuple([int(elem) for elem in line.split('\t')[0:-1]]) \
                    for line in f]
+       # convert indexing to 0-index
+        ratings = [(u-1,i-1,r) for u,i,r in ratings]
     return ratings
     
 def read_user_ratings(filename, user_id):
-    user_hash = {}    
     with open(filename, 'r') as f:
-        user_ratings = [(int(line.split()[1]), int(line.split()[2]) \
-        for line in f if int(line.split()[0])==user_id]                
+        user_ratings = [(int(line.split()[1]), int(line.split()[2]))\
+                       for line in f if int(line.split()[0])==user_id]
     return user_ratings
             
 if __name__=='__main__':
