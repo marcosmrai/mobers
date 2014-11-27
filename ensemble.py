@@ -1,33 +1,42 @@
 from bisect import insort
 from pmf import nise
-from dbread import read_ratings
+from dbread import read_ratings, fake_ratings
 from recommend import Recommender
 from pmf import ProbabilisticMatrixFactorization as PMF
-#%%
-class Ensemble():
+import numpy as np
+
+class Ensemble(object):
     def __init__(self, MF_list):
         self.MF_list = MF_list
-        self.RS = Recommender()
+        #TODO lista de recomenders
+        self.RS = []
+        for pmf in MF_list:
+            self.RS.append(Recommender(pmf.items))
+        self.r_list = []
 
-    def majority (self, user_vector,unrated_items, topk):
+
+class Majority(Ensemble):
+    def __init__(self, MF_list):
+        Ensemble.__init__(self, MF_list)
+
+    def get_list(self, user_vector, unrated_items, topk):
         item_vote = [0]*self.MF_list[0].num_items
-        for pmf in self.MF_list:
-            self.RS.set_itemMF(pmf.items)
-            t_user_vector = self.RS.transform_user(user_vector)
-            r_list = self.RS.get_list(t_user_vector, unrated_items, topk)
-            print 'rlist', rlist
-            r_list = [item for item, rating in r_list]
-            for item in r_list:
-                item_vote[item]+=1
+        for i, pmf in enumerate(self.MF_list):
+            RS = self.RS[i]
+            t_user_vector = RS.transform_user(user_vector)
+            r_list = RS.get_list(t_user_vector, unrated_items, topk)
+            self.r_list.append(r_list)
+            for item, rating in r_list:
+                item_vote[item] += rating
         ensemble = []
-        for item,votes in enumerate (item_vote):
-            insort(ensemble, (item,votes))
+        for item, votes in enumerate(item_vote):
+            insort(ensemble, (item, votes))
         return ensemble[-topk:][::-1]
 
 
 
 if __name__ == "__main__":
-    #%%
+
     DATASET = 'fake'
 
     if DATASET == 'fake':
@@ -44,17 +53,17 @@ if __name__ == "__main__":
         ratings = np.array(ratings).astype(float)
         MF_list = nise(ratings)
 
-    #%%
+
     ens = Ensemble(MF_list)
-    uid=50.0
+    uid = 50.0
     #gerar usuario teste
     nitems = MF_list[0].num_items
     user_vector = np.zeros((1,nitems),dtype=float)
     for line in ratings:
-        if line[0]==uid:
+        if line[0] == uid:
             user_vector[:,line[1]]=line[2]
-    unrated_items = [i for i,r in enumerate(user_vector) if r[0]==0.0]
+    unrated_items = [i for i, r in enumerate(user_vector) if r[0] == 0.0]
     topk = 5
     #gera lista de rec.
-    rlist = ens.majority(user_vector,unrated_items,topk)
-    print 'final rlist',rlist
+    rlist = ens.majority(user_vector, unrated_items, topk)
+    print 'final rlist', rlist
