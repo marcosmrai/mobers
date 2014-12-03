@@ -7,6 +7,8 @@ import pickle
 import copy
 import bisect
 
+import time
+
 from dbread import *
 
 class ProbabilisticMatrixFactorization():
@@ -29,17 +31,23 @@ class ProbabilisticMatrixFactorization():
 	self.learning_rate = .0001
 	self.converged = False
 
-
     def getReg(self):
 	return self.regularization_strength
+
+    def sampleError(self,rating,users,items):
+	i,j,rat=rating
+	return (i,j,numpy.dot(users[i],items[j])-rat)
 
     def error(self, ratings, users=None, items=None):
         if users is None:
             users = self.users
         if items is None:
             items = self.items
-            
-        sq_error = sum([(rating-numpy.dot(users[i],items[j]))**2 for i, j, rating in ratings])
+
+	#self.errorVec=[self.sampleError(rating_,users,items) for rating_ in ratings]
+	self.errorVec=[(i,j,numpy.dot(users[i],items[j])-rat) for i,j,rat in ratings]
+
+	sq_error = sum([(err)**2 for i, j, err in self.errorVec])
         L2_norm = numpy.sum(users**2)+numpy.sum(items**2)
 
         return (1-self.regularization_strength)*sq_error + self.regularization_strength * L2_norm
@@ -56,14 +64,15 @@ class ProbabilisticMatrixFactorization():
         return np.array([sq_error,L2_norm])
         
     def update(self, ratings):
+	initial_lik = self.error(ratings)
 
         grad_o = numpy.zeros((self.num_users, self.latent_d))
         grad_d = numpy.zeros((self.num_items, self.latent_d))        
 
-        for i, j, rating in ratings:
-            r_hat = numpy.sum(self.users[i] * self.items[j])
-            grad_o[i] += self.items[j] * (r_hat - rating)
-            grad_d[j] += self.users[i] * (r_hat - rating)
+	for i, j, err_ in self.errorVec:
+            r_hat = numpy.dot(self.users[i],self.items[j])
+            grad_o[i] += self.items[j] * (err_)
+            grad_d[j] += self.users[i] * (err_)
 
         while (not self.converged):
             initial_lik = self.error(ratings)
@@ -129,12 +138,8 @@ class ProbabilisticMatrixFactorization():
         self.items.dump(prefix + "%sd_items.pickle" % self.latent_d)
 
     def gradient_descent(self, ratings):
-	liks=[]
         while (not self.update(ratings)):
-            lik = self.error(ratings)
-            liks.append(lik)
             pass
-        return liks
 
 def plot_ratings(ratings):
     xs = []
@@ -183,15 +188,17 @@ def plot_predicted_ratings(U, V):
     plt.title("Predicted Ratings")
     plt.axis("off")
 
-def nise(ratings):
-	hVError=0.005
+def nise(ratings,nSol=100,hVError=0.001):
 	init={}
-	pmf1 =ProbabilisticMatrixFactorization(ratings, latent_d=5,regularization_strength=0.9)
+	print 'Nise started'
+	pmf1 =ProbabilisticMatrixFactorization(ratings, latent_d=100,regularization_strength=0.9)
 	pmf1.gradient_descent(ratings)
+	print 'Solution 0','Errors: ',pmf1.objErrors(ratings)
 
 	pmf0 = copy.copy(pmf1)
 	pmf0.updateReg(regularization_strength=0.0)
 	pmf0.gradient_descent(ratings)
+	print 'Solution 1','Errors: ',pmf0.objErrors(ratings)
 
 	init={'N1':pmf1,'N1e':pmf1.objErrors(ratings),'N2':pmf0,'N2e':pmf0.objErrors(ratings)}
 	norm=[(init['N2e'][0]-init['N1e'][0]),(init['N2e'][1]-init['N1e'][1])]
@@ -200,19 +207,21 @@ def nise(ratings):
 
 	out=[pmf1,pmf0]
 
-	itera=1
+	sols=2
+	
+	#return out
 
 	while efList!=[]:
 		actual=efList.pop(0)
-		if actual['err']>hVError and abs(actual['N1'].getReg()-actual['N2'].getReg())>10**-2 and itera<100:
+		if actual['err']>hVError and abs(actual['N1'].getReg()-actual['N2'].getReg())>10**-2 and sols<nSol:
 			actual['reg']=-(actual['N1e'][0]-actual['N2e'][0])/(actual['N1e'][1]-actual['N2e'][1])
 			actual['reg']=actual['reg']/(actual['reg']+1)
 			alpha=np.random.random()
-			#actual['reg']=alpha*actual['N2'].getReg()+(1-alpha)*actual['N1'].getReg()
 			actual['sol']=copy.copy(actual['N2'])
 			actual['sol'].updateReg(regularization_strength=actual['reg'])
 			actual['sol'].gradient_descent(ratings)
 
+			print 'Solution',sols,'Errors: ',actual['sol'].objErrors(ratings)
 			out.append(actual['sol'])
 
 			next={'N1':actual['sol'],'N1e':actual['sol'].objErrors(ratings),'N2':actual['N2'],'N2e':actual['N2e']}
@@ -225,50 +234,34 @@ def nise(ratings):
 
 			efList.append(next)
 	
-			itera+=1
+			sols+=1
 
 	return out
 
 def plotPareto(list_,ratings):
     plotL=np.array([i.objErrors(ratings) for i in list_])
-    print plotL.shape
     plt.plot(plotL[:,0],plotL[:,1],'o')
     plt.show()
 
 
 if __name__ == "__main__":
 
-    DATASET = 'fake'
+    
+    DATASET = ''
 
     if DATASET == 'fake':
         (ratings, true_o, true_d) = fake_ratings()
-
-    ratings = numpy.array(ratings).astype(float)
-
-    #plot_ratings(ratings)
-
-    out=nise(ratings)
-    plotPareto(out,ratings)
-    '''
-    pmf = ProbabilisticMatrixFactorization(ratings, latent_d=5)    
-    liks = []
-    #while (not pmf.update()):
-    #    lik = pmf.error()
-    #    liks.append(lik)
-    #    print "L=", lik
-    #    pass
-    liks=pmf.gradient_descent(ratings)
+	ratings = numpy.array(ratings).astype(float)
+    else:
+        ratings=read_ratings('ml-100k/u.data')
     
-    plt.figure()
-    plt.plot(liks)
-    plt.xlabel("Iteration")
-    plt.ylabel("Log Error")
+    out=nise(ratings)
 
-    plot_latent_vectors(pmf.users, pmf.items)
-    plot_predicted_ratings(pmf.users, pmf.items)
-    plt.show()
+    with open('u-100k.out', 'wb') as handle:
+        pickle.dump((out,ratings), handle)
+    
 
-    pmf.print_latent_vectors()
+    with open('u-100k.out', 'rb') as handle:
+        out,ratings = pickle.load(handle)
 
-    pmf.save_latent_vectors("models/")
-    '''
+    plotPareto(out,ratings)
