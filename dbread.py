@@ -34,7 +34,8 @@ def read_ratings(filename):
         ratings = [tuple([int(elem) for elem in line.split('\t')[0:-1]]) \
                    for line in f]
        # convert indexing to 0-index
-        ratings = [(u-1,i-1,r) for u,i,r in ratings]
+        #ratings = [(u-1,i-1,r) for u,i,r in ratings]
+	ratings = np.array([[u-1,i-1,r] for u,i,r in ratings])
     return ratings
 
 def read_user_ratings(filename, user_id):
