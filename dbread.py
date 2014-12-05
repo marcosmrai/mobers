@@ -1,4 +1,7 @@
 import numpy as np
+import math
+import random
+import pickle
 
 def fake_ratings(noise=.25):
     u = []
@@ -44,5 +47,36 @@ def read_user_ratings(filename, user_id):
                        for line in f if int(line.split()[0])==user_id]
     return user_ratings
 
+def k_fold_gen(folder,filename,finfo,k):
+    ratings=read_ratings(filename)
+    ratings.shape
+    with open(finfo, 'r') as f:
+        nUsers=int(f.readline().split(' ')[0])
+    foldSize=int(math.ceil(nUsers/float(k)))
+    ## insert -1 users to round the k folds and randomize the folds with less users
+    usersList=range(nUsers)+[-1 for i in range(foldSize*k-nUsers)]
+    ## shuffle users to generate k-folds
+    random.shuffle(usersList)
+    ## divide the users in folds
+    usersFolds=[[user for user in usersList[i*foldSize:(i+1)*foldSize] if user>= 0] for i in range(k)]
+    ratingFolds=[[rating.tolist() for rating in ratings if rating[0] in uFold] for uFold in usersFolds]
+    foldLen=[len(foldd) for foldd in usersFolds]
+    for i in range(k):
+        mapAdd=[(fold!=i)*sum([foldLen[fold2]*(fold2!=i) for fold2 in range(fold)]) for fold in range(k)]
+        userMap=[(indexUser,mapUser+mapAdd[indexFold]) for indexFold,foldd in enumerate(usersFolds) for mapUser,indexUser in enumerate(foldd)]
+        userMap=sorted(userMap,key=lambda x:x[0])
+
+        with open(folder+'/fold'+str(i)+'.pickle', 'wb') as handle:
+            pickle.dump((np.array([[userMap[rating[0]][1]]+rating[1:] for ratingList in ratingFolds[:i]+ratingFolds[i+1:] for rating in ratingList]),np.array([[userMap[rating[0]][1]]+rating[1:] for rating in ratingFolds[i]])), handle)
+    
+
+def fold_load(folder,fold):
+    with open(folder+'/fold'+str(fold)+'.pickle', 'rb') as handle:
+        train,test=pickle.load(handle)
+    return train,test
+
 if __name__=='__main__':
-    print read_ratings('ml-100k/u.data')
+    #print read_ratings('ml-100k/u.data')
+    k_fold_gen('ml-100k','ml-100k/u.data','ml-100k/u.info',5)
+    #train,test=fold_load('ml-100k',1)
+    #print max(train[:,0]),max(test[:,0])
