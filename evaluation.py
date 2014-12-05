@@ -4,7 +4,7 @@ Evaluation module
 from recommend import Recommender
 import numpy as np
 from np.random import choice
-
+from ensemble import Majority
 
 class Evaluation(object):
     '''
@@ -66,44 +66,30 @@ class Evaluation(object):
         return (precision, recall)
 
 
-class Kfold(object):
-    '''
-    Performs k fold testing or validation
-    '''
-    def __init__(self, k, RS):
-        self.k = k
-        self.evaluation = Evaluation(RS)
-        self.folds = []
+def avg_eval(train, evaluator):
+    precision = 0
+    recall = 0
+    for user in train:
+        P, R = evaluator.precision_recall(user)
+        precision += P
+        recall += R
+    precision /= len(train)
+    recall /= len(train)
+    return (precision, recall)
 
-    def set_system(self, RS):
-        self.evaluation = RS
+def performance():
+    # list of PR matrices for each fold.
+    # fist line is ensemble, others are nise solutions
+    PR_per_fold = []
+    for k in range(10):
+#TODO change to prototypes of real read functions when they're implemented
+        train, test = read_fold(k)
+        pmf_list = read_nise_results()
 
-    def gen_split(self, n_users):
-        '''
-        Generate k-fold split to be used in k-fold validation
-        '''
-        quantity = n_users/self.k
-        idx = np.random.permutation(range(n_users))
-        for i in xrange(0, self.k-1):
-            self.folds.append(idx[i*quantity:(i+1)*quantity])
-        self.folds.append(idx[self.k-1*quantity:])
+        ensemble = Majority(pmf_list)
 
-    def _pick_split(self, val_fold):
-        '''
-        returns indexes for training and validation, with fold[val_fold] being
-        the validation fold
-        '''
-        training = []
-        for i in range(k):
-            if i == val_fold:
-                validation = self.fold[val_fold]
-            else:
-                training += self.fold[val_fold]
-        return (training, validation)
-
-    def run(self):
-        '''
-        Do k-fold validation
-        '''
-        #TODO implement
-        pass
+        evalu_ensemble = Evaluation(ensemble)
+        evalu_RS_list = [Evaluation(RS) for RS in ensemble.RS]
+        evaluators = [evalu_ensemble] + evalu_RS_list
+        PR_per_fold.append(np.array([avg_eval(train, evalu) for evalu in evaluators]))
+    return PR_per_fold

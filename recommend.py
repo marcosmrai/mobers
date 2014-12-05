@@ -10,8 +10,9 @@ class Recommender(object):
         self.n_items = []
         if item_MF is not None:
             self.set_itemMF(item_MF)
-        self.user_MF = []
+        self.last_user_query = []
         self.threshold = threshold
+        self.last_recommendation = []
 
     def set_userMF(self, mat):
         self.user_MF = mat
@@ -28,13 +29,17 @@ class Recommender(object):
         return np.dot(user_vector, self.ITpinv)
 
     def get_list(self, user_MF_vector, unrated_items, topk):
-        new_ratings = []
-        for item in unrated_items:
-            r_hat = sum(user_MF_vector*(self.item_MF[item-1, :]))
-            if r_hat >= self.threshold:
-                insort(new_ratings, (r_hat, item))
-        recommended_list = [(item, rating)
-                            for rating, item in new_ratings[-topk:][::-1]]
+        if self.last_user_query != (user_MF_vector, unrated_items):
+            self.last_user_query = (user_MF_vector, unrated_items)
+            new_ratings = []
+            for item in unrated_items:
+                r_hat = sum(user_MF_vector*(self.item_MF[item-1, :]))
+                if r_hat >= self.threshold:
+                    insort(new_ratings, (r_hat, item))
+            recommended_list = [(item, rating)
+                                for rating, item in new_ratings[-topk:][::-1]]:
+        else:
+            recommended_list = self.last_recommendation
         return recommended_list
 
 if __name__ == '__main__':

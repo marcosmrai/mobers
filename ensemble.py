@@ -9,7 +9,7 @@ class Ensemble(object):
     def __init__(self, MF_list):
         self.MF_list = MF_list
         #TODO lista de recomenders
-        self.RS = []
+        self.RS_list = []
         for pmf in MF_list:
             self.RS.append(Recommender(pmf.items))
         self.r_list = []
@@ -18,6 +18,9 @@ class Ensemble(object):
 class Majority(Ensemble):
     def __init__(self, MF_list):
         Ensemble.__init__(self, MF_list)
+
+    def transform_user(self, user_vector):
+        return user_vector
 
     def get_list(self, user_vector, unrated_items, topk):
         item_vote = [0]*self.MF_list[0].num_items
@@ -54,7 +57,7 @@ if __name__ == "__main__":
         MF_list = nise(ratings)
 
 
-    ens = Ensemble(MF_list)
+    ens = Majority(MF_list)
     uid = 50.0
     #gerar usuario teste
     nitems = MF_list[0].num_items
