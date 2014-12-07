@@ -68,15 +68,43 @@ def k_fold_gen(folder,filename,finfo,k):
 
         with open(folder+'/fold'+str(i)+'.pickle', 'wb') as handle:
             pickle.dump((np.array([[userMap[rating[0]][1]]+rating[1:] for ratingList in ratingFolds[:i]+ratingFolds[i+1:] for rating in ratingList]),np.array([[userMap[rating[0]][1]]+rating[1:] for rating in ratingFolds[i]])), handle)
+
+def k_fold_gen2(folder,filename,finfo,k):
+    s=2*k
+    ratings=read_ratings(filename)
+    ratings.shape
+    with open(finfo, 'r') as f:
+        nUsers=int(f.readline().split(' ')[0])
+    foldSize=int(math.ceil(nUsers/float(s)))
+    ## insert -1 users to round the k folds and randomize the folds with less users
+    usersList=range(nUsers)+[-1 for i in range(foldSize*s-nUsers)]
+    ## shuffle users to generate k-folds
+    random.shuffle(usersList)
+    ## divide the users in folds
+    usersFolds=[[user for user in usersList[i*foldSize:(i+1)*foldSize] if user>= 0] for i in range(s)]
+    ratingFolds=[[rating.tolist() for rating in ratings if rating[0] in uFold] for uFold in usersFolds]
+    foldLen=[len(foldd) for foldd in usersFolds]
+    for i in range(k):
+        mapAdd=[(fold!=i)*sum([foldLen[fold2]*(fold2!=i) for fold2 in range(fold)]) for fold in range(k)]
+        mapAdd=np.array([(fold!=(2*i)%s and fold!=(2*i+1)%s and fold!=(2*i+2)%s)*sum([foldLen[fold2]*(fold2!=(2*i)%s and fold2!=(2*i+1)%s and fold2!=(2*i+2)%s) for fold2 in range(fold)]) for fold in range(s)])
+        mapAdd+=np.array([(fold!=(2*i)%s and (fold==(2*i+1)%s or fold==(2*i+2)%s))*sum([foldLen[fold2]*(fold2!=(2*i)%s and (fold2==(2*i+1)%s or fold2==(2*i+2)%s)) for fold2 in range(fold)]) for fold in range(s)])
+        userMap=[(indexUser,mapUser+mapAdd[indexFold]) for indexFold,foldd in enumerate(usersFolds) for mapUser,indexUser in enumerate(foldd)]
+        userMap=sorted(userMap,key=lambda x:x[0])
+
+        with open(folder+'/fold'+str(i)+'.pickle', 'wb') as handle:
+            train=np.array([[userMap[rating[0]][1]]+rating[1:] for ratingList in ratingFolds[:2*i]+ratingFolds[2*(i+1)+1:] for rating in ratingList])
+            valid=np.array([[userMap[rating[0]][1]]+rating[1:] for rating in ratingFolds[2*i]])
+            test=np.array([[userMap[rating[0]][1]]+rating[1:] for ratingList in (ratingFolds+[ratingFolds[0]])[2*i+1:2*i+3] for rating in ratingList])
+            pickle.dump((train,valid,test), handle)
     
 
 def fold_load(folder,fold):
     with open(folder+'/fold'+str(fold)+'.pickle', 'rb') as handle:
-        train,test=pickle.load(handle)
-    return train,test
+        train,valid,test=pickle.load(handle)
+    return train,valid,test
 
 if __name__=='__main__':
     #print read_ratings('ml-100k/u.data')
-    k_fold_gen('ml-100k','ml-100k/u.data','ml-100k/u.info',5)
-    #train,test=fold_load('ml-100k',1)
-    #print max(train[:,0]),max(test[:,0])
+    #k_fold_gen2('ml-100k','ml-100k/u.data','ml-100k/u.info',5)
+    train,valid,test=fold_load('ml-100k',1)
+    print max(train[:,0]),max(valid[:,0]),max(test[:,0])
