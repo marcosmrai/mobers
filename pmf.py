@@ -10,6 +10,7 @@ import bisect
 import time
 
 from dbread import *
+import multiprocessing
 
 class ProbabilisticMatrixFactorization():
 
@@ -188,17 +189,17 @@ def plot_predicted_ratings(U, V):
     plt.title("Predicted Ratings")
     plt.axis("off")
 
-def nise(ratings,nSol=100,hVError=0.001):
+def nise(ratings,nSol=100,hVError=0.001,latent_d=100):
 	init={}
-	print 'Nise started'
-	pmf1 =ProbabilisticMatrixFactorization(ratings, latent_d=100,regularization_strength=0.9)
+	print 'Nise started: ',multiprocessing.current_process()
+	pmf1 =ProbabilisticMatrixFactorization(ratings, latent_d,regularization_strength=0.9)
 	pmf1.gradient_descent(ratings)
-	print 'Solution 0','Errors: ',pmf1.objErrors(ratings)
+	print 'Solution 0','Errors: ',pmf1.objErrors(ratings),multiprocessing.current_process()
 
 	pmf0 = copy.copy(pmf1)
 	pmf0.updateReg(regularization_strength=0.0)
 	pmf0.gradient_descent(ratings)
-	print 'Solution 1','Errors: ',pmf0.objErrors(ratings)
+	print 'Solution 1','Errors: ',pmf0.objErrors(ratings),multiprocessing.current_process()
 
 	init={'N1':pmf1,'N1e':pmf1.objErrors(ratings),'N2':pmf0,'N2e':pmf0.objErrors(ratings)}
 	norm=[(init['N2e'][0]-init['N1e'][0]),(init['N2e'][1]-init['N1e'][1])]
@@ -221,7 +222,7 @@ def nise(ratings,nSol=100,hVError=0.001):
 			actual['sol'].updateReg(regularization_strength=actual['reg'])
 			actual['sol'].gradient_descent(ratings)
 
-			print 'Solution',sols,'Errors: ',actual['sol'].objErrors(ratings)
+			print 'Solution',sols,'Errors: ',actual['sol'].objErrors(ratings),multiprocessing.current_process()
 			out.append(actual['sol'])
 
 			next={'N1':actual['sol'],'N1e':actual['sol'].objErrors(ratings),'N2':actual['N2'],'N2e':actual['N2e']}
@@ -243,11 +244,19 @@ def plotPareto(list_,ratings):
     plt.plot(plotL[:,0],plotL[:,1],'o')
     plt.show()
 
+def niseRun(fold):
+    train,valid,test=fold_load('ml-100k',fold)
+    out=nise(train,latent_d=50)
+    with open('u-100k-fold-'+str(fold)+'.out', 'wb') as handle:
+        pickle.dump((out,train,valid,test), handle)
+    print 'Done: ',multiprocessing.current_process()
+    
+
 
 if __name__ == "__main__":
+    '''
 
-    
-    DATASET = ''
+    DATASET = 'fake'
 
     if DATASET == 'fake':
         (ratings, true_o, true_d) = fake_ratings()
@@ -255,13 +264,17 @@ if __name__ == "__main__":
     else:
         ratings=read_ratings('ml-100k/u.data')
     
-    out=nise(ratings)
+    out=nise(ratings,latent_d=50)
 
     with open('u-100k.out', 'wb') as handle:
         pickle.dump((out,ratings), handle)
     
-
+    
     with open('u-100k.out', 'rb') as handle:
         out,ratings = pickle.load(handle)
-
-    plotPareto(out,ratings)
+    '''
+    p=multiprocessing.Pool(5)
+    p.map(niseRun,range(5))
+    #with open('u-100k-fold-'+str(fold)+'.out', 'rb') as handle:
+    #    out,train,valid,test=pickle.load(handle)
+    #plotPareto(out,valid)
