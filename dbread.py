@@ -75,6 +75,7 @@ def k_fold_gen2(folder,filename,finfo,k):
     ratings.shape
     with open(finfo, 'r') as f:
         nUsers=int(f.readline().split(' ')[0])
+	nItems=int(f.readline().split(' ')[0])
     foldSize=int(math.ceil(nUsers/float(s)))
     ## insert -1 users to round the k folds and randomize the folds with less users
     usersList=range(nUsers)+[-1 for i in range(foldSize*s-nUsers)]
@@ -92,19 +93,26 @@ def k_fold_gen2(folder,filename,finfo,k):
         userMap=sorted(userMap,key=lambda x:x[0])
 
         with open(folder+'/fold'+str(i)+'.pickle', 'wb') as handle:
-            train=np.array([[userMap[rating[0]][1]]+rating[1:] for ratingList in ratingFolds[:2*i]+ratingFolds[2*(i+1)+1:] for rating in ratingList])
-            valid=np.array([[userMap[rating[0]][1]]+rating[1:] for rating in ratingFolds[2*i]])
-            test=np.array([[userMap[rating[0]][1]]+rating[1:] for ratingList in (ratingFolds+[ratingFolds[0]])[2*i+1:2*i+3] for rating in ratingList])
-            pickle.dump((train,valid,test), handle)
+            train=np.array([[userMap[rating[0]][1],rating[1],rating[2]] for ratingList in ratingFolds[:2*i]+ratingFolds[2*(i+1)+1:] for rating in ratingList])
+	    trainU=max(train[:,0])+1
+	    trainI=nItems
+            valid=np.array([[userMap[rating[0]][1],rating[1],rating[2]] for rating in ratingFolds[2*i]])
+	    validU=max(valid[:,0])+1
+	    validI=nItems
+            test=np.array([[userMap[rating[0]][1],rating[1],rating[2]] for ratingList in (ratingFolds+[ratingFolds[0]])[2*i+1:2*i+3] for rating in ratingList])
+	    testU=max(test[:,0])+1
+	    testI=nItems
+            pickle.dump((train,trainU,trainI,valid,validU,validI,test,testU,testI), handle)
     
 
 def fold_load(folder,fold):
     with open(folder+'/fold'+str(fold)+'.pickle', 'rb') as handle:
-        train,valid,test=pickle.load(handle)
-    return train,valid,test
+        train,trainU,trainI,valid,validU,validI,test,testU,testI=pickle.load(handle)
+    return train,trainU,trainI,valid,validU,validI,test,testU,testI
 
 if __name__=='__main__':
     #print read_ratings('ml-100k/u.data')
-    #k_fold_gen2('ml-100k','ml-100k/u.data','ml-100k/u.info',5)
-    train,valid,test=fold_load('ml-100k',1)
-    print max(train[:,0]),max(valid[:,0]),max(test[:,0])
+    k_fold_gen2('ml-100k','ml-100k/u.data','ml-100k/u.info',5)
+    #train,trainU,trainI,valid,validU,validI,test,testU,testI=fold_load('ml-100k',1)
+    #print trainU+validU+testU
+    #print max(train[:,0]),max(valid[:,0]),max(test[:,0])

@@ -14,15 +14,15 @@ import multiprocessing
 
 class ProbabilisticMatrixFactorization():
 
-    def __init__(self, ratings, latent_d=1,regularization_strength=0.1):
+    def __init__(self, ratings, nUsers, nItems, latent_d=50,regularization_strength=0.1):
         self.latent_d = latent_d
         self.learning_rate = .0001
         self.regularization_strength = regularization_strength
 
         self.converged = False
 
-        self.num_users = int(numpy.max(ratings[:, 0]) + 1)
-        self.num_items = int(numpy.max(ratings[:, 1]) + 1)
+        self.num_users = nUsers
+        self.num_items = nItems
 
         self.users = numpy.random.normal(0,0.3,(self.num_users, self.latent_d))
         self.items = numpy.random.normal(0,0.3,(self.num_items, self.latent_d))
@@ -189,14 +189,14 @@ def plot_predicted_ratings(U, V):
     plt.title("Predicted Ratings")
     plt.axis("off")
 
-def nise(ratings,nSol=100,hVError=0.001,latent_d=100):
+def nise(ratings,nUsers,nItems,nSol=100,hVError=0.001,latent_d=100):
 	init={}
 	print 'Nise started: ',multiprocessing.current_process()
-	pmf1 =ProbabilisticMatrixFactorization(ratings, latent_d,regularization_strength=0.9)
+	pmf1 =ProbabilisticMatrixFactorization(ratings,nUsers,nItems,latent_d,regularization_strength=0.9)
 	pmf1.gradient_descent(ratings)
 	print 'Solution 0','Errors: ',pmf1.objErrors(ratings),multiprocessing.current_process()
 
-	pmf0 = copy.copy(pmf1)
+	pmf0 = copy.deepcopy(pmf1)
 	pmf0.updateReg(regularization_strength=0.0)
 	pmf0.gradient_descent(ratings)
 	print 'Solution 1','Errors: ',pmf0.objErrors(ratings),multiprocessing.current_process()
@@ -218,7 +218,7 @@ def nise(ratings,nSol=100,hVError=0.001,latent_d=100):
 			actual['reg']=-(actual['N1e'][0]-actual['N2e'][0])/(actual['N1e'][1]-actual['N2e'][1])
 			actual['reg']=actual['reg']/(actual['reg']+1)
 			alpha=np.random.random()
-			actual['sol']=copy.copy(actual['N2'])
+			actual['sol']=copy.deepcopy(actual['N2'])
 			actual['sol'].updateReg(regularization_strength=actual['reg'])
 			actual['sol'].gradient_descent(ratings)
 
@@ -245,10 +245,10 @@ def plotPareto(list_,ratings):
     plt.show()
 
 def niseRun(fold):
-    train,valid,test=fold_load('ml-100k',fold)
-    out=nise(train,latent_d=50)
-    with open('u-100k-fold-'+str(fold)+'.out', 'wb') as handle:
-        pickle.dump((out,train,valid,test), handle)
+    train,trainU,trainI,valid,validU,validI,test,testU,testI=fold_load('ml-100k',fold)
+    out=nise(train,trainU,trainI,latent_d=50)
+    with open('u-100k-fold-d50-'+str(fold)+'.out', 'wb') as handle:
+        pickle.dump(out, handle)
     print 'Done: ',multiprocessing.current_process()
     
 
