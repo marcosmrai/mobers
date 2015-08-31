@@ -11,6 +11,7 @@ from pickle import dump, load
 from multiprocessing import Pool
 
 
+
 class Evaluation(object):
     '''
     Evaluates a recommender system.
@@ -34,16 +35,21 @@ class Evaluation(object):
                 u_negatives.append(i)
         return (u_positives, u_negatives)
 
-    def precision_recall(self, user_vector):
+    def precision_recall(self, user_vector, hidden=None):
         u_positives, u_negatives = self._split_positive_negative(user_vector)
-        #print '# + and -', len(u_positives), len(u_negatives)
-        # Hide some items to check on them later
-        random_pick = lambda(aList): list(
-                   choice(aList,
-                   np.ceil(self.pct_hidden*len(aList)),
-                   replace=False)) if aList != [] else aList
-        hidden_positives = random_pick(u_positives)  # u and Ihid
-        hidden = hidden_positives + random_pick(u_negatives)
+        if hidden == None:        
+            #print '# + and -', len(u_positives), len(u_negatives)
+            # Hide some items to check on them later
+            random_pick = lambda(aList): list(
+                       choice(aList,
+                       np.ceil(self.pct_hidden*len(aList)),
+                       replace=False)) if aList != [] else aList
+            hidden_positives = random_pick(u_positives)  # u and Ihid
+            hidden = hidden_positives + random_pick(u_negatives)
+        else:
+            hidden_positives, hidden_negatives = hidden
+            hidden = hidden_positives + hidden_negatives
+            
         #print 'hidden', len(hidden)
         new_vector = [0 if i in hidden else rating
                       for i, rating in enumerate(user_vector)]
@@ -51,7 +57,7 @@ class Evaluation(object):
         # Transform user_vector with the curent MF and generate recomendations
         new_vector = self.RS.transform_user(np.array(new_vector, ndmin=2))
         rlist = dict(self.RS.get_list(new_vector, hidden, self.topk))
-
+        #print rlist
         # Calculate precision and recall
         #r and Ihid
         pred_hidden = set(hidden) & set(rlist)
@@ -88,7 +94,7 @@ def get_user_vectors(test, n_items):
         vectors.append(user_vector)
     return vectors
 
-def eval_users(test, evaluator, n_items):
+def eval_users(test, hidden, evaluator, n_items):
     precision = []
     recall = []
     users = set([u for u, i, r in test])
@@ -99,39 +105,77 @@ def eval_users(test, evaluator, n_items):
             if user == u:
                 user_vector[i] = r
 
-        P, R = evaluator.precision_recall(user_vector)
+        P, R = evaluator.precision_recall(user_vector, hidden[user])
         #print 'pr', P, R
         precision.append(P)
         recall.append(R)
 
     return (precision, recall)
 
+def save_test_items():
+    for k in range(5):
+        train, trainU, trainI, valid, validU, validI, test, testU, testI = \
+        fold_load('ml-100k',k)
+        n_items = testI
+        pct_hidden=0.2
+        output = []
+        for dataset in [valid, test]:
+            users = set([u for u, i, r in dataset])
+            hidden = {}
+            #print 'user set', len(users)
+            for user in users:
+                user_vector = [0]*n_items
+                for u, i, r in dataset:
+                    if user == u:
+                        user_vector[i] = r
+           
+                u_positives = []
+                u_negatives = []
+                for i, rating in enumerate(user_vector):
+                    if rating >= 3:
+                        u_positives.append(i)
+                    elif rating >0:
+                        u_negatives.append(i)
 
+                # Hide some items to check on them later
+                random_pick = lambda(aList): list(
+                           choice(aList,
+                           np.ceil(pct_hidden*len(aList)),
+                           replace=False)) if aList != [] else aList
+                hidden_positives = random_pick(u_positives)  # u and Ihid
+                hidden[user] = (hidden_positives, random_pick(u_negatives))
+            output.append(hidden)
+        with open('ml-100k/fold%d-hidden.pickle'%k, 'wb') as f:
+            dump(tuple(output), f)
+    
 def performance(k, d=100, topk=10):
     print 'fold', k, d, topk
 
     # returns train, valid, test
-    with open('data/u-100k-fold-d%d-%d.out' % (d, k), 'rb') as f:
+    with open('models/u-100k-fold-d%d-%d.out' % (d, k), 'rb') as f:
         pmf_list = load(f)
         #pmf_list = pmf_list[:3]
     train, trainU, trainI, valid, validU, validI, test, testU, testI = \
-    fold_load('data/ml-100k',k)
+        fold_load('ml-100k',k)
+
+    with open('ml-100k/fold%d-hidden.pickle'%k, 'rb') as f:
+        hidden_v, hidden_t = load(f)
+    
 
     print 'loaded pmf_list'
-
 
     RS_list = []
     for mf_id, pmf in enumerate(pmf_list):
         RS_list.append(Recommender(item_MF=pmf.items))
     evalu_RS_list = [Evaluation(RS=RS, topk=topk) for RS in RS_list]
     print 'RS_list created'
-
-
     n_items = RS_list[0].n_items
+
+
     result = []
 
     for mf_id, evaluator in enumerate(evalu_RS_list):
-        P, R = eval_users(valid, evaluator, n_items)
+        P, R = eval_users(valid, hidden_v, evaluator, n_items)
         result.append([d,
                        pmf_list[mf_id].regularization_strength,
                        np.mean(P), np.mean(R)])
@@ -150,7 +194,7 @@ def performance(k, d=100, topk=10):
     print 'ensembles created'
 
     for e_id, evaluator in enumerate(evalu_ensemble):
-        P, R = eval_users(test, evaluator, n_items)
+        P, R = eval_users(test, hidden_t, evaluator, n_items)
         P = np.mean(P)
         R = np.mean(R)
 
@@ -161,7 +205,11 @@ def performance(k, d=100, topk=10):
 
     print 'saving results'
 
-    with open('results/u-100k-fold-%d-d%d-top%d-results.out' % (d, k, topk), 'wb') as f:
+    times = [pmf.training_time for pmf in pmf_list]
+    result_folder = 'results_31_08_2015/'
+    with open(result_folder+'u-100k-fold-%d-d%d-top%d-times.out' % (d, k, topk), 'wb') as f:
+        dump(times, f)
+    with open(result_folder+'u-100k-fold-%d-d%d-top%d-results.out' % (d, k, topk), 'wb') as f:
         dump(result, f)
 
 def pool_performance(tup):
@@ -170,9 +218,13 @@ def pool_performance(tup):
 
 if __name__ == '__main__':
     #performance(k=0, d=50, topk=10)
+    #save_test_items()
+    
     pool_args = [(k, d, topk) for k in range(5)
-              for d in [50,100]
-              for topk in range(5, 20+1, 5)]
-    p = Pool(4)
+              for d in [25, 50]#,50, 100]
+              for topk in [5]]
+              #for topk in range(5, 20+1, 5)]
+    p = Pool(1)
     p.map(pool_performance, pool_args)
-    #performance(d=50)
+    
+    #performance(0,d=50)

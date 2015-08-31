@@ -2,7 +2,7 @@ import numpy as np
 from bisect import insort
 import os
 from pickle import dump, load
-from numpy.linalg import inv
+from numpy.linalg import pinv
 
 class Recommender(object):
 
@@ -30,10 +30,12 @@ class Recommender(object):
         idx = user_vector[0,:]>0
         mat = self.item_MF[idx,:]
         user_vector = user_vector[0,idx]
-        self.ITpinv = np.dot(mat, (inv(np.dot(mat.T, mat))))
+        self.ITpinv = np.dot(mat, (pinv(np.dot(mat.T, mat))))
         return np.dot(user_vector, self.ITpinv)
 
     def get_list(self, user_MF_vector, unrated_items, topk):
+        if np.isscalar(user_MF_vector):
+            user_MF_vector = self.get_user_vector(user_MF_vector)
         new_ratings = []
         for item in unrated_items:
             r_hat = sum(user_MF_vector*(self.item_MF[item, :]))

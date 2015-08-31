@@ -11,6 +11,7 @@ class Ensemble(object):
         self.RS_list = RS_list
         self.r_lists = []
         self.threshold = threshold
+        self.n_items =self.RS_list[0].n_items
 
     def transform_user(self, user_vector):
         return user_vector
@@ -24,7 +25,9 @@ class Majority(Ensemble):
     def get_list(self, user_vector, unrated_items, topk):
         item_vote = [0]*self.RS_list[0].n_items
         for i, RS in enumerate(self.RS_list):
-            t_user_vector = RS.transform_user(user_vector)
+            if not np.isscalar(user_vector):
+                t_user_vector = RS.transform_user(user_vector)
+            else: t_user_vector = user_vector
             r_list = RS.get_list(t_user_vector, unrated_items, topk)
             self.r_lists.append(r_list)
             for item, rating in r_list:
@@ -47,7 +50,9 @@ class WeightedVote(Ensemble):
     def get_list(self, user_vector, unrated_items, topk):
         item_vote = [0]*self.RS_list[0].n_items
         for RS_id, RS in enumerate(self.RS_list):
-            t_user_vector = RS.transform_user(user_vector)
+            if not np.isscalar(user_vector):
+                t_user_vector = RS.transform_user(user_vector)
+            else: t_user_vector = user_vector
             r_list = RS.get_list(t_user_vector, unrated_items, topk)
             self.r_lists.append(r_list)
             for item, rating in r_list:

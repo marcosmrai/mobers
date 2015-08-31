@@ -44,7 +44,7 @@ def read_ratings(filename):
 def read_user_ratings(filename, user_id):
     with open(filename, 'r') as f:
         user_ratings = [(int(line.split()[1]), int(line.split()[2]))\
-                       for line in f if int(line.split()[0])==user_id]
+                       for line in f if int(line.split()[0])==(user_id+1)]
     return user_ratings
 
 def k_fold_gen(folder,filename,finfo,k):
@@ -103,7 +103,40 @@ def k_fold_gen2(folder,filename,finfo,k):
 	    testU=max(test[:,0])+1
 	    testI=nItems
             pickle.dump((train,trainU,trainI,valid,validU,validI,test,testU,testI), handle)
-    
+
+def twoxk(folder,filename,finfo,k,rate=0.1):
+    ratings=read_ratings(filename)
+    ratings.shape
+    with open(finfo, 'r') as f:
+        nUsers=int(f.readline().split(' ')[0])
+	nItems=int(f.readline().split(' ')[0])
+
+    for i in range(k):
+        shuffled = range(nUsers)
+        random.shuffle(shuffled)
+
+        for invert in range(2):
+
+            shuffled.reverse()
+
+            trainUsers = shuffled[:nUsers/2-int(math.ceil(nUsers*rate))]
+            valUsers = shuffled[nUsers/2-int(math.ceil(nUsers*rate)):nUsers/2]
+            testUsers = shuffled[nUsers/2:]            
+
+            with open(folder+'/fold'+str(2*i+invert)+'.pickle', 'wb') as handle:
+                train=np.array([[trainUsers.index(rating[0]),rating[1],rating[2]] for rating in ratings if rating[0] in trainUsers])
+                trainU=max(train[:,0])+1
+                trainI=nItems
+   
+                valid=np.array([[valUsers.index(rating[0]),rating[1],rating[2]] for rating in ratings if rating[0] in valUsers])
+                validU=max(valid[:,0])+1
+                validI=nItems
+        
+                test=np.array([[testUsers.index(rating[0]),rating[1],rating[2]] for rating in ratings if rating[0] in testUsers])
+                testU=max(test[:,0])+1
+                testI=nItems
+
+                pickle.dump((train,trainU,trainI,valid,validU,validI,test,testU,testI), handle)
 
 def fold_load(folder,fold):
     with open(folder+'/fold'+str(fold)+'.pickle', 'rb') as handle:
@@ -112,7 +145,7 @@ def fold_load(folder,fold):
 
 if __name__=='__main__':
     #print read_ratings('ml-100k/u.data')
-    k_fold_gen2('ml-100k','ml-100k/u.data','ml-100k/u.info',5)
+    twoxk('ml-100k','ml-100k/u.data','ml-100k/u.info',5)
     #train,trainU,trainI,valid,validU,validI,test,testU,testI=fold_load('ml-100k',1)
     #print trainU+validU+testU
     #print max(train[:,0]),max(valid[:,0]),max(test[:,0])
