@@ -272,17 +272,18 @@ def plotPareto(list_,ratings):
     plt.ylabel('Regularization objective (L2 norm)')
     #plt.show()
 
-def niseRun(fold):
+def niseRun(poolpar):
+    fold,d=poolpar
     train,trainU,trainI,valid,validU,validI,test,testU,testI=fold_load('ml-100k',fold)
     t0 = time()
-    for d in [5,15,25]:
-        out=nise(train,trainU,trainI,latent_d=d)
-        with open('models/u-100k-fold-d%d-' % d +str(fold)+'.out', 'wb') as handle:
-            pickle.dump(out, handle)
-        runtime = time()-t0
-        print 'Done: ',time()-t0,' s',multiprocessing.current_process()
-        with open('models/u-100k-fold-d%d-' % d +str(fold)+'runtime.out', 'wb') as handle:
-            pickle.dump(runtime, handle)
+    #for d in [5,15,25]:
+    out=nise(train,trainU,trainI,latent_d=d)
+    with open('models/u-100k-fold-d%d-' % d +str(fold)+'.out', 'wb') as handle:
+        pickle.dump(out, handle)
+    runtime = time()-t0
+    print 'Done: ',time()-t0,' s',multiprocessing.current_process()
+    with open('models/u-100k-fold-d%d-' % d +str(fold)+'runtime.out', 'wb') as handle:
+        pickle.dump(runtime, handle)
 
 
 
@@ -306,8 +307,10 @@ if __name__ == "__main__":
     with open('u-100k.out', 'rb') as handle:
         out,ratings = pickle.load(handle)
     '''
-    p=multiprocessing.Pool(5)
-    p.map(niseRun,range(5))
+    poolList = [(fold,d) for fold in range(5) for d in [5,15,25]]
+    print poolList
+    p=multiprocessing.Pool(4)
+    p.map(niseRun,poolList)
 #    with open('result/u-100k-fold-'+str(fold)+'.out', 'rb') as handle:
 #        out,train,valid,test=pickle.load(handle)
 #    plotPareto(out,valid)
