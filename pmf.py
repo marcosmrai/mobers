@@ -17,7 +17,7 @@ class ProbabilisticMatrixFactorization():
 
     def __init__(self, ratings, nUsers, nItems, latent_d=50,regularization_strength=0.1):
         self.latent_d = latent_d
-        self.learning_rate = .0001
+        self.learning_rate = .001
         self.regularization_strength = regularization_strength
 
         self.converged = False
@@ -25,10 +25,8 @@ class ProbabilisticMatrixFactorization():
         self.num_users = nUsers
         self.num_items = nItems
 
-        self.users = numpy.ones((self.num_users, self.latent_d))/numpy.sqrt(self.latent_d)
-        self.items = numpy.ones((self.num_items, self.latent_d))/numpy.sqrt(self.latent_d)
-        #self.users = numpy.random.normal(0,0.3,(self.num_users, self.latent_d))
-        #self.items = numpy.random.normal(0,0.3,(self.num_items, self.latent_d))
+        self.users = numpy.ones((self.num_users, self.latent_d))/numpy.sqrt(self.latent_d)*0.001
+        self.items = numpy.ones((self.num_items, self.latent_d))/numpy.sqrt(self.latent_d)*0.001
         self.training_time = 0
 
     def updateReg(self,regularization_strength):
@@ -240,7 +238,7 @@ def nise(ratings,nUsers,nItems,nSol=100,hVError=0.001,latent_d=100,
 
     #return out
 
-    while efList!=[]:
+    while efList!=[] and sols<50:
         actual=efList.pop(0)
         if actual['err']>hVError and abs(actual['N1'].getReg()-actual['N2'].getReg())>10**-2 and sols<nSol:
             actual['reg']=-(actual['N1e'][0]-actual['N2e'][0])/(actual['N1e'][1]-actual['N2e'][1])
@@ -277,7 +275,7 @@ def plotPareto(list_,ratings):
 def niseRun(fold):
     train,trainU,trainI,valid,validU,validI,test,testU,testI=fold_load('ml-100k',fold)
     t0 = time()
-    for d in [25,50]:#[50, 100]:
+    for d in [5,15,25]:
         out=nise(train,trainU,trainI,latent_d=d)
         with open('models/u-100k-fold-d%d-' % d +str(fold)+'.out', 'wb') as handle:
             pickle.dump(out, handle)
