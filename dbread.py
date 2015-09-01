@@ -158,4 +158,4 @@ def fold_load(folder,fold):
   return train,trainU,trainI,valid,validU,validI,test,testU,testI
 
 if __name__=='__main__':
-  twoxk('ml-100k','ml-100k/u.data','ml-100k/u.info',5)
+  kfold('ml-100k','ml-100k/u.data','ml-100k/u.info',5)

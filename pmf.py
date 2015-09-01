@@ -13,75 +13,157 @@ from time import time
 from dbread import *
 import multiprocessing
 
+import scipy.optimize as opt
+
+#from mpl_toolkits.mplot3d import Axes3D
+#import matplotlib
+#import matplotlib.pyplot as plt
+
+class mf():
+    def __init__(self, nUsers, nItems, rTrain, d=50, lambdaa=0.1): 
+        self.d = d
+        self.lambdaa = lambdaa
+
+        self.rTrain = rTrain
+
+        self.nU = nUsers
+        self.nI = nItems
+        self.nR = len(rTrain)
+
+        self.theta = numpy.ones(self.nU*self.d + self.nI*self.d)/numpy.sqrt(self.d)*0.001
+        self.training_time = 0
+
+        # create the inicialization function
+
+    # calculates the error for a rating
+    def sampleError(self, rating, theta = self.theta):
+        (u,i,score) = rating
+        uv = theta[self.d*u: self.d*(u+1)]
+        iv = theta[ (self.nU*self.d + self.d*i) : (self.nU*self.d + self.d*(i+1))]
+        return numpy.dot(uv,iv)-score
+        
+    # calculates the error objective
+    def errorObj(self,theta=self.theta):
+        obj=0
+        for rating in self.ratings:
+            obj+=sampleError(theta,rating)**2
+
+        return obj/nR
+
+    # calculates the regularization objective
+    def regObj(self,theta=self.theta):
+        return theta.sum()/(self.nU*self.d + self.nI*self.d)
+
+    # calculates the scalarized objective 
+    def fObj(self,theta=self.theta):
+        return (1-self.lambdaa)*errorObj(theta)+self.lambdaa*regObj(theta)
+
+    # calculates the gradient for the error objective
+    def errorGrad(self,theta=self.theta):
+        grad = numpy.zeros(self.theta.shape)
+
+        for rating in self.ratings:
+            u,i,score = rating
+            grad[self.d*u: self.d*(u+1)] += 2*self.theta[self.d*u: self.d*(u+1)]*sampleError(rating)
+            grad[ (self.nU*self.d + self.d*i) : (self.nU*self.d + self.d*(i+1))] \
+                += 2*theta[ (self.nU*self.d + self.d*i) : (self.nU*self.d + self.d*(i+1))]*sampleError(rating)
+
+        return grad
+
+    # calculates the gradient for the regularization objective
+    def regGrad(self,theta=self.theta):
+        grad = 2*self.theta/(self.nU*self.d + self.nI*self.d)
+        return grad
+
+    # calculates the gradient for the scalarized objective
+    def fGrad(self,theta=self.theta):
+        return (1-self.lambdaa)*errorGrad(theta)+self.lambdaa*regGrad(theta)
+
+    def optimize(self):
+        out = opt.minimize(self.fObj, self.theta, jac=self.fGrad)
+        self.theta=out.x
+        self.objs=[errorObj(theta),regObj(theta)]
+
+
 class ProbabilisticMatrixFactorization():
 
-    def __init__(self, ratings, nUsers, nItems, latent_d=50,regularization_strength=0.1):
-        self.latent_d = latent_d
+    def __init__(self, ratings, nUsers, nItems, d=50,lambdaa=0.1):
+        self.d = d
         self.learning_rate = .001
-        self.regularization_strength = regularization_strength
+        self.lambdaa = lambdaa
 
         self.converged = False
 
         self.num_users = nUsers
         self.num_items = nItems
+        self.num_ratings = len(ratings)
 
-        self.users = numpy.ones((self.num_users, self.latent_d))/numpy.sqrt(self.latent_d)*0.001
-        self.items = numpy.ones((self.num_items, self.latent_d))/numpy.sqrt(self.latent_d)*0.001
+        self.users = numpy.ones((self.num_users, self.d))/numpy.sqrt(self.d)*0.001
+        self.items = numpy.ones((self.num_items, self.d))/numpy.sqrt(self.d)*0.001
         self.training_time = 0
 
-    def updateReg(self,regularization_strength):
-        self.regularization_strength=regularization_strength
+    # update the reg for a new model
+    def updateReg(self,lambdaa):
+        self.lambdaa=lambdaa
         self.learning_rate = .0001
         self.converged = False
 
+    # return the regularization parameter
     def getReg(self):
-        return self.regularization_strength
+        return self.lambdaa
 
+    # calculates the error of a rating
     def sampleError(self,rating,users,items):
         i,j,rat=rating
         return (i,j,numpy.dot(users[i],items[j])-rat)
 
+    # calculate the scalarized error
     def error(self, ratings, users=None, items=None):
         if users is None:
             users = self.users
         if items is None:
             items = self.items
 
-        #self.errorVec=[self.sampleError(rating_,users,items) for rating_ in ratings]
+        # update the error vector
         self.errorVec=[(i,j,numpy.dot(users[i],items[j])-rat) for i,j,rat in ratings]
 
-        sq_error = sum([(err)**2 for i, j, err in self.errorVec])
-        L2_norm = numpy.sum(users**2)+numpy.sum(items**2)
+        # calculate the objective functions
+        sq_error = sum([(err)**2 for i, j, err in self.errorVec])/self.num_ratings
+        L2_norm = numpy.sum(users**2)/users.size+numpy.sum(items**2)/items.size
 
-        return (1-self.regularization_strength)*sq_error + self.regularization_strength * L2_norm
+        #return the scalarized objective error
+        return (1-self.lambdaa)*sq_error + self.lambdaa * L2_norm
 
+    # calculate the objective functions
     def objErrors(self, ratings, users=None, items=None):
         if users is None:
             users = self.users
         if items is None:
             items = self.items
 
-        sq_error = sum([(rating-numpy.dot(users[i],items[j]))**2 for i, j, rating in ratings])
-        L2_norm = numpy.sum(users**2)+numpy.sum(items**2)
+        sq_error = sum([(rating-numpy.dot(users[i],items[j]))**2 for i, j, rating in ratings])/self.num_ratings
+        L2_norm = numpy.sum(users**2)/users.size+numpy.sum(items**2)/items.size
 
         return np.array([sq_error,L2_norm])
 
+    # apply an update
     def update(self, ratings):
-        initial_lik = self.error(ratings)
+        # inicializate the gradient with the regularization factor
+        grad_o = self.lambdaa*2*self.items/self.items.size
+        grad_d = self.lambdaa*2*self.users/self.users.size
 
-        grad_o = numpy.zeros((self.num_users, self.latent_d))
-        grad_d = numpy.zeros((self.num_items, self.latent_d))
-
+        # add to the gradient the error factor
         for i, j, err_ in self.errorVec:
-            r_hat = numpy.dot(self.users[i],self.items[j])
-            grad_o[i] += self.items[j] * (err_)
-            grad_d[j] += self.users[i] * (err_)
+            grad_o[i] += (1-self.lambdaa)*self.items[j] * (err_)
+            grad_d[j] += (1-self.lambdaa)*self.users[i] * (err_)
 
         while (not self.converged):
+            #calculates the initial likelehood
             initial_lik = self.error(ratings)
 
             self.try_updates(grad_o, grad_d)
 
+            #calculates the updated likelehood
             final_lik = self.error(ratings,self.new_users, self.new_items)
 
             if final_lik < initial_lik:
@@ -109,7 +191,7 @@ class ProbabilisticMatrixFactorization():
 
     def try_updates(self, grad_o, grad_d):
         alpha = self.learning_rate
-        lambd = self.regularization_strength
+        lambd = self.lambdaa
 
         self.new_users = self.users - alpha * ((1-lambd)*grad_o + lambd * self.users)
         self.new_items = self.items - alpha * ((1-lambd)*grad_d + lambd * self.items)
@@ -124,21 +206,21 @@ class ProbabilisticMatrixFactorization():
         print "Users"
         for i in range(self.num_users):
             print i,
-            for d in range(self.latent_d):
+            for d in range(self.d):
                 print self.users[i, d],
             print
 
         print "Items"
         for i in range(self.num_items):
             print i,
-            for d in range(self.latent_d):
+            for d in range(self.d):
                 print self.items[i, d],
             print
 
 
     def save_latent_vectors(self, prefix):
-        self.users.dump(prefix + "%sd_users.pickle" % self.latent_d)
-        self.items.dump(prefix + "%sd_items.pickle" % self.latent_d)
+        self.users.dump(prefix + "%sd_users.pickle" % self.d)
+        self.items.dump(prefix + "%sd_items.pickle" % self.d)
 
     def gradient_descent(self, ratings, batchsize=None):
         t0 = time()
@@ -214,16 +296,16 @@ def plot_predicted_ratings(U, V):
     plt.title("Predicted Ratings")
     plt.axis("off")
 
-def nise(ratings,nUsers,nItems,nSol=100,hVError=0.001,latent_d=100,
+def nise(ratings,nUsers,nItems,nSol=100,hVError=0.001,d=100,
          batchsize=None):
     init={}
     print 'Nise started: ',multiprocessing.current_process()
-    pmf1 =ProbabilisticMatrixFactorization(ratings,nUsers,nItems,latent_d,regularization_strength=0.9)
+    pmf1 =ProbabilisticMatrixFactorization(ratings,nUsers,nItems,d,lambdaa=0.9)
     pmf1.gradient_descent(ratings, batchsize)
     print 'Solution 0','Errors: ',pmf1.objErrors(ratings),multiprocessing.current_process()
 
     pmf0 = copy.deepcopy(pmf1)
-    pmf0.updateReg(regularization_strength=0.0)
+    pmf0.updateReg(lambdaa=0.0)
     pmf0.gradient_descent(ratings, batchsize)
     print 'Solution 1','Errors: ',pmf0.objErrors(ratings),multiprocessing.current_process()
 
@@ -245,7 +327,7 @@ def nise(ratings,nUsers,nItems,nSol=100,hVError=0.001,latent_d=100,
             actual['reg']=actual['reg']/(actual['reg']+1)
             alpha=np.random.random()
             actual['sol']=copy.deepcopy(actual['N2'])
-            actual['sol'].updateReg(regularization_strength=actual['reg'])
+            actual['sol'].updateReg(lambdaa=actual['reg'])
             actual['sol'].gradient_descent(ratings, batchsize)
 
             print 'Solution',sols,'Errors: ',actual['sol'].objErrors(ratings),multiprocessing.current_process()
@@ -277,7 +359,7 @@ def niseRun(poolpar):
     train,trainU,trainI,valid,validU,validI,test,testU,testI=fold_load('ml-100k',fold)
     t0 = time()
     #for d in [5,15,25]:
-    out=nise(train,trainU,trainI,latent_d=d)
+    out=nise(train,trainU,trainI,d=d)
     with open('models/u-100k-fold-d%d-' % d +str(fold)+'.out', 'wb') as handle:
         pickle.dump(out, handle)
     runtime = time()-t0
@@ -298,7 +380,7 @@ if __name__ == "__main__":
     else:
         ratings=read_ratings('ml-100k/u.data')
 
-    out=nise(ratings,latent_d=50)
+    out=nise(ratings,d=50)
 
     with open('u-100k.out', 'wb') as handle:
         pickle.dump((out,ratings), handle)
