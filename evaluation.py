@@ -10,7 +10,20 @@ from pmf import ProbabilisticMatrixFactorization
 from pickle import dump, load
 from multiprocessing import Pool
 
+'''
+GLOBAL PARAMETERS
 
+Parameter of the main script
+'''
+NFOLDS = 5
+DIMLIST = [15, 25]
+TOPKLIST = [5]
+PCTHIDEN = 0.2 
+THRESHOLD = 3
+MODELSFOLDER = 'models/'
+RESULTFOLDER = 'result/'
+GEN_HIDDEN_ITEMS = False # If true will ramdomly sample and save the hidden items for test and validation
+NPROC = 1 # if >1, will create a pool with NPROC workers
 
 class Evaluation(object):
     '''
@@ -21,36 +34,10 @@ class Evaluation(object):
         self.topk = topk
         self.pct_hidden = pctHidden
 
-    def _split_positive_negative(self, user_vector):
-        '''
-        Split items in positive and negative evaluations
-        To be used in P&R calculation
-        '''
-        u_positives = []
-        u_negatives = []
-        for i, rating in enumerate(user_vector):
-            if rating >= self.RS.threshold:
-                u_positives.append(i)
-            elif rating >0:
-                u_negatives.append(i)
-        return (u_positives, u_negatives)
-
-    def precision_recall(self, user_vector, hidden=None):
-        u_positives, u_negatives = self._split_positive_negative(user_vector)
-        if hidden == None:        
-            #print '# + and -', len(u_positives), len(u_negatives)
-            # Hide some items to check on them later
-            random_pick = lambda(aList): list(
-                       choice(aList,
-                       np.ceil(self.pct_hidden*len(aList)),
-                       replace=False)) if aList != [] else aList
-            hidden_positives = random_pick(u_positives)  # u and Ihid
-            hidden = hidden_positives + random_pick(u_negatives)
-        else:
-            hidden_positives, hidden_negatives = hidden
-            hidden = hidden_positives + hidden_negatives
+    def precision_recall(self, user_vector, hidden):
+        hidden_positives, hidden_negatives = hidden
+        hidden = hidden_positives + hidden_negatives
             
-        #print 'hidden', len(hidden)
         new_vector = [0 if i in hidden else rating
                       for i, rating in enumerate(user_vector)]
         unrated = [i for i, rating in enumerate(new_vector) if rating == 0]
@@ -64,13 +51,10 @@ class Evaluation(object):
         #r and u and Ihid
         pred_hidden_positives = pred_hidden & set(hidden_positives)
 
-        #print 'pred hidden positives, pred hidden, hidden_positives ', len(pred_hidden_positives), len(pred_hidden), len(hidden_positives)
-
         if len(hidden_positives) > 0:
             recall = len(pred_hidden_positives)/float(len(hidden_positives))
         else:
             recall = 1.
-
         if len(pred_hidden) > 0:
             precision = len(pred_hidden_positives)/float(len(pred_hidden))
         elif len(u_positives) == 0:
@@ -78,23 +62,43 @@ class Evaluation(object):
         else:
             precision = 0.
 
-        #print 'pr', precision, recall
         return (precision, recall)
 
 def get_user_vectors(test, n_items):
     users = set([u for u, i, r in test])
     #print 'user set', len(users)
-    vectors = []
+    vectors = {}
     for user in users:
         user_vector = [0]*n_items
         for u, i, r in test:
             if user == u:
-                    user_vector[i] = r
+                user_vector[i] = r
 
-        vectors.append(user_vector)
+        vectors[user] = user_vector
     return vectors
 
+def split_positive_negative(user_vector, threshold=3):
+    '''
+    Split items in positive and negative evaluations
+    To be used in P&R calculation
+    '''
+    u_positives = []
+    u_negatives = []
+    for i, rating in enumerate(user_vector):
+        if rating >= threshold:
+            u_positives.append(i)
+        elif rating >0:
+            u_negatives.append(i)
+    return (u_positives, u_negatives)
+    
+    
 def eval_users(test, hidden, evaluator, n_items):
+    '''
+    test: list with test tuples (user, item, rating)
+    hidden: dictionary with list of hidden test items per user key
+    evaluator: Evaluator object
+    n_items: total number of items in the database
+    '''
     precision = []
     recall = []
     users = set([u for u, i, r in test])
@@ -111,48 +115,56 @@ def eval_users(test, hidden, evaluator, n_items):
         recall.append(R)
 
     return (precision, recall)
-
-def save_test_items():
-    for k in range(5):
-        train, trainU, trainI, valid, validU, validI, test, testU, testI = \
-        fold_load('ml-100k',k)
-        n_items = testI
-        pct_hidden=0.2
-        output = []
-        for dataset in [valid, test]:
-            users = set([u for u, i, r in dataset])
-            hidden = {}
-            #print 'user set', len(users)
-            for user in users:
-                user_vector = [0]*n_items
-                for u, i, r in dataset:
-                    if user == u:
-                        user_vector[i] = r
-           
-                u_positives = []
-                u_negatives = []
-                for i, rating in enumerate(user_vector):
-                    if rating >= 3:
-                        u_positives.append(i)
-                    elif rating >0:
-                        u_negatives.append(i)
-
-                # Hide some items to check on them later
-                random_pick = lambda(aList): list(
-                           choice(aList,
-                           np.ceil(pct_hidden*len(aList)),
-                           replace=False)) if aList != [] else aList
-                hidden_positives = random_pick(u_positives)  # u and Ihid
-                hidden[user] = (hidden_positives, random_pick(u_negatives))
-            output.append(hidden)
-        with open('ml-100k/fold%d-hidden.pickle'%k, 'wb') as f:
-            dump(tuple(output), f)
     
-def performance(k, d=100, topk=10):
-    print 'fold', k, d, topk
+    
+def get_hidden(u_positives, u_negatives, pct_hidden):
+    # Hide some items to check on them later
+    random_pick = lambda(aList): list(
+               choice(aList,
+               np.ceil(pct_hidden*len(aList)),
+               replace=False)) if aList != [] else aList
+    hidden_positives = random_pick(u_positives)  # u and Ihid
+    return (hidden_positives, random_pick(u_negatives))
+    
+    
+def save_test_items(pct_hidden = 0.2, threshold=3):
+    '''
+    Saves a set of hidden items for each user in the validation and test set 
+    '''
+    for k in range(NFOLDS):
+        # Load fold k
+        train, trainU, trainI, valid, validU, validI, test, testU, testI = \
+            fold_load('ml-100k',k)
+        n_items = testI
+        hidden = {}
+        user_vectors = get_user_vectors(valid, n_items)
+        for user in users_vectors:
+            u_positives, u_negatives = \
+                split_positive_negative(user_vectors[user], threshold)
+            hidden[user] = get_hidden_items(u_positives, u_negatives, pct_hidden)
+        with open('ml-100k/fold%d-hidden.pickle'%k, 'wb') as f:
+            dump(hidden, f)
+    # repeat for test set
+    hidden = {}
+    user_vectors = get_user_vectors(test, n_items)
+    for user in users_vectors:
+        u_positives, u_negatives = \
+            split_positive_negative(user_vectors[user], threshold)
+        hidden[user] = get_hidden_items(u_positives, u_negatives, pct_hidden)
+        with open('ml-100k/test-hidden.pickle', 'wb') as f:
+            dump(hidden, f)
+    
+def performance(k, d, topk=5):
+    '''
+    k: fold index
+    d: latent dimensionality of pmf model
+    topk: size of recomendation list
+    '''
+    
+    print 'fold %d, dim %d, top %d list' % (k, d, topk)
 
     # returns train, valid, test
-    with open('models/u-100k-fold-d%d-%d.out' % (d, k), 'rb') as f:
+    with open(MODELFOLDER + '/u-100k-fold-d%d-%d.out' % (d, k), 'rb') as f:
         pmf_list = load(f)
         #pmf_list = pmf_list[:3]
     train, trainU, trainI, valid, validU, validI, test, testU, testI = \
@@ -206,7 +218,7 @@ def performance(k, d=100, topk=10):
     print 'saving results'
 
     times = [pmf.training_time for pmf in pmf_list]
-    result_folder = 'results_31_08_2015/'
+    result_folder = RESULTFOLDER
     with open(result_folder+'u-100k-fold-%d-d%d-top%d-times.out' % (d, k, topk), 'wb') as f:
         dump(times, f)
     with open(result_folder+'u-100k-fold-%d-d%d-top%d-results.out' % (d, k, topk), 'wb') as f:
@@ -217,14 +229,15 @@ def pool_performance(tup):
     performance(k=k, d=d, topk=topk)
 
 if __name__ == '__main__':
-    #performance(k=0, d=50, topk=10)
-    #save_test_items()
+    if GEN_HIDDEN_ITEMS:
+        save_test_items(PCTHIDDEN, THRESHOLD)
+    pool_args = [(k, d, topk) for k in NFOLDS
+                for d in DIMSLIST
+                for topk in TOPKLIST]
+    if NPROC > 1:
+        p = Pool(1)
+        p.map(pool_performance, pool_args)
+    else:
+        map(pool_performance, pool_args)
     
-    pool_args = [(k, d, topk) for k in range(5)
-              for d in [25, 50]#,50, 100]
-              for topk in [5]]
-              #for topk in range(5, 20+1, 5)]
-    p = Pool(1)
-    p.map(pool_performance, pool_args)
     
-    #performance(0,d=50)
