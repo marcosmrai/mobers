@@ -3,7 +3,7 @@ Evaluation module
 '''
 import numpy as np
 from numpy.random import choice
-from ensemble import Majority, WeightedVote
+from ensemble import Majority, WeightedVote, FilteredMajority
 from dbread import fold_load
 from recommend import Recommender
 from pmf import mf
@@ -24,6 +24,10 @@ MODELFOLDER = 'models/'
 RESULTFOLDER = 'results/'
 GEN_HIDDEN_ITEMS = False # If true will ramdomly sample and save the hidden items for test and validation
 NPROC = 1 # if >1, will create a pool with NPROC workers
+
+
+ENSEMBLE_ORDER = {'vote': -4, 'filtered': -3, 'weighted': -2,  'best': -1}
+
 
 class Evaluation(object):
     '''
@@ -197,12 +201,15 @@ def performance(k, d, topk=5):
 
 
     # ensembles
+    # If order is changed, please adjust ENSMEBLE_ORDER constant
     E1 = Majority(RS_list, threshold=3)
     precisions = [line[2] for line in result]
+    E1f = FilteredMajority(RS_list, performances=precisions, threshold=3)
     E2 = WeightedVote(RS_list, weights=precisions, threshold=3)
     best_RS = np.argmax(precisions)
     E3 = RS_list[best_RS]
     evalu_ensemble = [Evaluation(RS=E1, topk=topk),
+                      Evaluation(RS=E1f, topk=topk),
                       Evaluation(RS=E2, topk=topk),
                       Evaluation(RS=E3, topk=topk)]
     print 'ensembles created'
