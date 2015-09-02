@@ -6,7 +6,7 @@ from numpy.random import choice
 from ensemble import Majority, WeightedVote
 from dbread import fold_load
 from recommend import Recommender
-from pmf import ProbabilisticMatrixFactorization
+from pmf import mf
 from pickle import dump, load
 from multiprocessing import Pool
 
@@ -16,12 +16,12 @@ GLOBAL PARAMETERS
 Parameter of the main script
 '''
 NFOLDS = 5
-DIMLIST = [15, 25]
+DIMLIST = [5, 15, 25]
 TOPKLIST = [5]
-PCTHIDEN = 0.2 
+PCTHIDDEN = 0.2
 THRESHOLD = 3
-MODELSFOLDER = 'models/'
-RESULTFOLDER = 'result/'
+MODELFOLDER = 'models/'
+RESULTFOLDER = 'results/'
 GEN_HIDDEN_ITEMS = False # If true will ramdomly sample and save the hidden items for test and validation
 NPROC = 1 # if >1, will create a pool with NPROC workers
 
@@ -37,7 +37,8 @@ class Evaluation(object):
     def precision_recall(self, user_vector, hidden):
         hidden_positives, hidden_negatives = hidden
         hidden = hidden_positives + hidden_negatives
-            
+        u_positives, u_negatives = \
+            split_positive_negative(user_vector, threshold = self.RS.threshold)
         new_vector = [0 if i in hidden else rating
                       for i, rating in enumerate(user_vector)]
         unrated = [i for i, rating in enumerate(new_vector) if rating == 0]
@@ -90,8 +91,8 @@ def split_positive_negative(user_vector, threshold=3):
         elif rating >0:
             u_negatives.append(i)
     return (u_positives, u_negatives)
-    
-    
+
+
 def eval_users(test, hidden, evaluator, n_items):
     '''
     test: list with test tuples (user, item, rating)
@@ -115,9 +116,9 @@ def eval_users(test, hidden, evaluator, n_items):
         recall.append(R)
 
     return (precision, recall)
-    
-    
-def get_hidden(u_positives, u_negatives, pct_hidden):
+
+
+def get_hidden_items(u_positives, u_negatives, pct_hidden):
     # Hide some items to check on them later
     random_pick = lambda(aList): list(
                choice(aList,
@@ -125,11 +126,11 @@ def get_hidden(u_positives, u_negatives, pct_hidden):
                replace=False)) if aList != [] else aList
     hidden_positives = random_pick(u_positives)  # u and Ihid
     return (hidden_positives, random_pick(u_negatives))
-    
-    
+
+
 def save_test_items(pct_hidden = 0.2, threshold=3):
     '''
-    Saves a set of hidden items for each user in the validation and test set 
+    Saves a set of hidden items for each user in the validation and test set
     '''
     for k in range(NFOLDS):
         # Load fold k
@@ -138,7 +139,7 @@ def save_test_items(pct_hidden = 0.2, threshold=3):
         n_items = testI
         hidden = {}
         user_vectors = get_user_vectors(valid, n_items)
-        for user in users_vectors:
+        for user in user_vectors:
             u_positives, u_negatives = \
                 split_positive_negative(user_vectors[user], threshold)
             hidden[user] = get_hidden_items(u_positives, u_negatives, pct_hidden)
@@ -147,20 +148,20 @@ def save_test_items(pct_hidden = 0.2, threshold=3):
     # repeat for test set
     hidden = {}
     user_vectors = get_user_vectors(test, n_items)
-    for user in users_vectors:
+    for user in user_vectors:
         u_positives, u_negatives = \
             split_positive_negative(user_vectors[user], threshold)
         hidden[user] = get_hidden_items(u_positives, u_negatives, pct_hidden)
         with open('ml-100k/test-hidden.pickle', 'wb') as f:
             dump(hidden, f)
-    
+
 def performance(k, d, topk=5):
     '''
     k: fold index
     d: latent dimensionality of pmf model
     topk: size of recomendation list
     '''
-    
+
     print 'fold %d, dim %d, top %d list' % (k, d, topk)
 
     # returns train, valid, test
@@ -171,8 +172,9 @@ def performance(k, d, topk=5):
         fold_load('ml-100k',k)
 
     with open('ml-100k/fold%d-hidden.pickle'%k, 'rb') as f:
-        hidden_v, hidden_t = load(f)
-    
+        hidden_v = load(f)
+    with open('ml-100k/test-hidden.pickle', 'rb') as f:
+        hidden_t = load(f)
 
     print 'loaded pmf_list'
 
@@ -189,7 +191,7 @@ def performance(k, d, topk=5):
     for mf_id, evaluator in enumerate(evalu_RS_list):
         P, R = eval_users(valid, hidden_v, evaluator, n_items)
         result.append([d,
-                       pmf_list[mf_id].regularization_strength,
+                       pmf_list[mf_id].lambdaa,
                        np.mean(P), np.mean(R)])
         print '!!!concluded RS ', mf_id, 'PR', np.mean(P), np.mean(R)
 
@@ -213,7 +215,7 @@ def performance(k, d, topk=5):
         result.append([d, P, R])
         print '!!!concluded E', e_id, 'PR', P, R
 
-    result[-1].insert(1, pmf_list[best_RS].regularization_strength)
+    result[-1].insert(1, pmf_list[best_RS].lambdaa)
 
     print 'saving results'
 
@@ -231,13 +233,14 @@ def pool_performance(tup):
 if __name__ == '__main__':
     if GEN_HIDDEN_ITEMS:
         save_test_items(PCTHIDDEN, THRESHOLD)
-    pool_args = [(k, d, topk) for k in NFOLDS
-                for d in DIMSLIST
-                for topk in TOPKLIST]
+    pool_args = [(k, d, topk)
+                 for k in range(NFOLDS)
+                 for d in DIMLIST
+                 for topk in TOPKLIST]
     if NPROC > 1:
         p = Pool(1)
         p.map(pool_performance, pool_args)
     else:
         map(pool_performance, pool_args)
-    
-    
+
+

@@ -8,7 +8,7 @@ Created on Wed Jul 15 11:15:33 2015
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import friedmanchisquare
-from pmf import ProbabilisticMatrixFactorization, plotPareto
+from pmf import mf, plotPareto
 from dbread import fold_load
 import os
 from pickle import load, dump
@@ -24,10 +24,10 @@ def dumpfile(obj,fname):
 GLOBAL PARAMETERS
 '''
 MODELSFOLDER="models/"
-RESULTSFOLDER="results_31_08_2015/"
+RESULTSFOLDER="results/"
 TOPK = 5
-NFOLDS = 5
-DIMS = [5,15]
+NFOLDS = 2
+DIMS = [5,15,25]
 
 # Colors for bar graphs
 color=['0.25','0.5','0.75']
@@ -66,7 +66,7 @@ for  d_idx, d in enumerate(DIMS):
             plt.figure(num=1)
     plt.figure(num=2*d_idx, figsize=(5,5))
     plt.tight_layout()
-    plt.savefig('time_all_folds_d%d.png' % d)
+    plt.savefig(RESULTSFOLDER+'time_all_folds_d%d.png' % d)
     table += [time, numsol]
 
 np.savetxt(RESULTSFOLDER+'table_numsol_hours.txt', np.array(table).T,
@@ -98,8 +98,7 @@ for d in DIMS:
     pWeigh=[]
 
     for fold in range(NFOLDS):
-        with open(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+'-top%d-results.out'%TOPK, 'rb') as handle:
-            out = pickle.load(handle)
+        out = loadfile(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+'-top%d-results.out'%TOPK)
         #ordem: maioria, ponderado, best
         #print out[-1]
         pBetter.append(out[-1][2])
@@ -112,7 +111,7 @@ for d in DIMS:
 
     print 'Precisions d=%d'%d
     Rprint = lambda alist :  ' = c(' + \
-                           ", ".join([str(it) for it in alist]) + ')' 
+                           ", ".join([str(it) for it in alist]) + ')'
     folds = [i for i in range(NFOLDS)]*3
     precisions = pBetter + pWeigh + pVote
     ids = ["'best'"]*NFOLDS + ["'weight'"]*NFOLDS + ["'vote'"]*NFOLDS
@@ -177,11 +176,9 @@ plt.savefig(RESULTSFOLDER+'precisionat%d_errorbars.png'%(TOPK))
 #%% Pareto plot
 for d in DIMS:
     fold=0
-    train,trainU,trainI,valid,validU,validI,test,testU,testI=\
-        fold_load('ml-100k',fold)
     out = loadfile(MODELSFOLDER+'u-100k-fold-d%d-%d.out'%(d, fold))
     plt.figure()
-    plotPareto(out,train)
+    plotPareto(out)
     plt.title('NISE solutions (d=%d)'%d)
 
     result = loadfile(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+'-top%d-results.out'%TOPK)
@@ -189,11 +186,14 @@ for d in DIMS:
     model_id = np.argmax(precisions)
     alambda = result[model_id][1]
 
-    errs = out[model_id].objErrors(train)
-    xticks = plt.gca.get_xticks()
+    errs = out[model_id].objs
+    xticks = plt.gca().get_xticks()
     dx = xticks[1] - xticks[0]
-    plt.text(errs[0]+dx, errs[1],'$\lambda=%0.4f$ (best in CV)'%alambda)
-    plt.arrow(errs[0]+dx, errs[1],-dx,0)
+    #plt.text(errs[0]+dx, errs[1],)
+    #plt.arrow(errs[0]+dx, errs[1],-dx,0, head_width=1)
+    plt.annotate('$\lambda=%0.4f$ (best in CV)'%alambda,
+                xy=(errs[0], errs[1]), xytext=(errs[0]+dx, errs[1]),
+                arrowprops=dict(facecolor='gray', shrink=0.025))
     plt.savefig(RESULTSFOLDER+'pareto_fold%d_train_d%d'%(fold, d))
 
 

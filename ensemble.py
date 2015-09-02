@@ -2,7 +2,7 @@ from bisect import insort
 from pmf import nise
 from dbread import read_ratings, fake_ratings
 from recommend import Recommender
-from pmf import ProbabilisticMatrixFactorization as PMF
+from pmf import mf as PMF
 import numpy as np
 
 

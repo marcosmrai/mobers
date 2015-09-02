@@ -16,7 +16,7 @@ import multiprocessing
 import scipy.optimize as opt
 
 class mf():
-    def __init__(self, rTrain, nUsers, nItems, d=50, lambdaa=0.1,listt = None): 
+    def __init__(self, rTrain, nUsers, nItems, d=50, lambdaa=0.1,listt = None):
         self.d = d
         self.lambdaa = lambdaa
 
@@ -57,11 +57,11 @@ class mf():
     def sampleError(self, rating, theta):
         u,i,score = rating
         uIndS = self.d*u;uIndF = self.d*(u+1);
-        iIndS = self.nU*self.d + self.d*i; iIndF = self.nU*self.d + self.d*(i+1); 
+        iIndS = self.nU*self.d + self.d*i; iIndF = self.nU*self.d + self.d*(i+1);
         uv = theta[uIndS:uIndF]
         iv = theta[iIndS:iIndF]
         return numpy.dot(uv,iv)-score
-        
+
     # calculates the error objective
     def errorObj(self,theta):
         obj=0
@@ -74,7 +74,7 @@ class mf():
     def regObj(self,theta):
         return np.dot(theta,theta)/theta.size
 
-    # calculates the scalarized objective 
+    # calculates the scalarized objective
     def fObj(self,theta):
         return (1-self.lambdaa)*self.errorObj(theta)+self.lambdaa*self.regObj(theta)
 
@@ -85,7 +85,7 @@ class mf():
         for rating in self.rTrain:
             u,i,score = rating
             uIndS = self.d*u;uIndF = self.d*(u+1);
-            iIndS = self.nU*self.d + self.d*i; iIndF = self.nU*self.d + self.d*(i+1); 
+            iIndS = self.nU*self.d + self.d*i; iIndF = self.nU*self.d + self.d*(i+1);
             error = self.sampleError(rating,theta)
             grad[uIndS:uIndF] += 2*theta[iIndS:iIndF]*error
             grad[iIndS:iIndF] += 2*theta[uIndS:uIndF]*error
@@ -152,7 +152,7 @@ class niseCand():
 def nise(ratings,nUsers,nItems,nSol=50,hVError=0.001,d=100,tol=10^-2,batchsize=None):
     init={}
     print 'Nise started: ',multiprocessing.current_process()
-    
+
     pmf1 = mf(ratings,nUsers,nItems,d,lambdaa=1)
     pmf1.optimize()
     print 'Solution 0','Errors: ',pmf1.objs
@@ -196,12 +196,13 @@ def nise(ratings,nUsers,nItems,nSol=50,hVError=0.001,d=100,tol=10^-2,batchsize=N
             sols+=1
     return out
 
-def plotPareto(list_,ratings,figpath):
+def plotPareto(list_,figpath=None):
     plotL=np.array([i.objs for i in list_])
     plt.plot(plotL[:,0],plotL[:,1],'ok')
     plt.xlabel('Squared error objective')
     plt.ylabel('Regularization objective (L2 norm)')
-    plt.savefig(figpath)
+    if figpath != None:
+        plt.savefig(figpath)
 
 def niseRun(poolpar):
     fold,d=poolpar
