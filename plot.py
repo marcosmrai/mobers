@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import friedmanchisquare
 from pmf import mf, plotPareto
+from evaluation import ENSEMBLE_ORDER
 from dbread import fold_load
 import os
 from pickle import load, dump
@@ -26,12 +27,12 @@ GLOBAL PARAMETERS
 MODELSFOLDER="models/"
 RESULTSFOLDER="results/"
 TOPK = 5
-NFOLDS = 2
+NFOLDS = 5
 DIMS = [5,15,25]
+E_ID = ENSMEBLE_ORDER
 
 # Colors for bar graphs
 color=['0.25','0.5','0.75']
-
 #%% Training time plot and table
 table = []
 for  d_idx, d in enumerate(DIMS):
@@ -47,7 +48,7 @@ for  d_idx, d in enumerate(DIMS):
         print 'total nise', totaltime/3600.0
         numsol += [len(times)]
         time += [totaltime/3600.0]
-        plt.subplot(NFOLDS/2, 2, fold+1)
+        plt.subplot(np.ceil(NFOLDS/2.0), 2, fold+1)
         plt.plot(hours, label='fold %d'%(fold+1))
         plt.yticks(fontsize='small')
         plt.xticks(fontsize='small')
