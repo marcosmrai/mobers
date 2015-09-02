@@ -38,6 +38,15 @@ class Majority(Ensemble):
 
         return [(item, votes) for votes, item in ensemble[-topk:][::-1]]
 
+class FilteredMajority(Majority):
+    def __init__(self, RS_list, performances, threshold=3):
+        id_performance = [(p, idx) for idx, p in enumerate(performances)]
+        id_performance.sort()
+        # Filter top 25% performances to generate RS_list
+        RS_list = [RS_list[idx]
+                   for p, idx in id_performance[-np.ceil(0.25*len(RS_list)):]]
+        Majority.__init__(self, RS_list, threshold)
+
 
 class WeightedVote(Ensemble):
     def __init__(self, RS_list, weights, threshold=3):
@@ -45,7 +54,10 @@ class WeightedVote(Ensemble):
         self.weights = weights
 
     def set_weights(self, weights):
-        self.weights = weights
+        hi = max(weights)
+        lo = min(weights)
+        denom = hi - lo
+        self.weights = [(w-lo)/denom for w in weights]
 
     def get_list(self, user_vector, unrated_items, topk):
         item_vote = [0]*self.RS_list[0].n_items
