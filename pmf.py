@@ -199,8 +199,8 @@ def nise(ratings,nUsers,nItems,nSol=50,hVError=0.001,d=100,tol=10^-2,batchsize=N
 def plotPareto(list_,figpath=None):
     plotL=np.array([i.objs for i in list_])
     plt.plot(plotL[:,0],plotL[:,1],'ok')
-    plt.xlabel('Squared error objective')
-    plt.ylabel('Regularization objective (L2 norm)')
+    plt.xlabel('MSE objective')
+    plt.ylabel('Regularization objective (Avg. L2 norm)')
     if figpath != None:
         plt.savefig(figpath)
 
