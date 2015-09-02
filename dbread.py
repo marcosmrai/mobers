@@ -157,5 +157,8 @@ def fold_load(folder,fold):
     train,trainU,trainI,valid,validU,validI,test,testU,testI=pickle.load(handle)
   return train,trainU,trainI,valid,validU,validI,test,testU,testI
 
+def datagen(ifolder):
+  kfold(ifolder,ifolder+'/u.data',ifolder+'/u.info',5)
+
 if __name__=='__main__':
   kfold('ml-100k','ml-100k/u.data','ml-100k/u.info',5)

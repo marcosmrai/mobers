@@ -149,7 +149,7 @@ class niseCand():
         self.lambdaa = np.linalg.solve([[self.n0.objs[0],self.n0.objs[1],-1],[self.n1.objs[0],self.n1.objs[1],-1],[1,1,0]],[0,0,1])[1]
 
 
-def nise(ratings,nUsers,nItems,nSol=50,hVError=0.001,d=100,tol=10^-2,batchsize=None):
+def nise(ratings,nUsers,nItems,nSol=50,hVError=1,d=100,tol=10^-2,batchsize=None):
     init={}
     print 'Nise started: ',multiprocessing.current_process()
 
@@ -205,20 +205,22 @@ def plotPareto(list_,figpath=None):
         plt.savefig(figpath)
 
 def niseRun(poolpar):
-    fold,d=poolpar
+    fold,d,modelsPath=poolpar
     train,trainU,trainI,valid,validU,validI,test,testU,testI=fold_load('ml-100k',fold)
     t0 = time()
     out=nise(train,trainU,trainI,d=d)
-    plotPareto(out,train,'pareto.jpg')
-    with open('models/u-100k-fold-d%d-' % d +str(fold)+'.out', 'wb') as handle:
+    with open(modelsPath+'/u-100k-fold-d%d-' % d +str(fold)+'.out', 'wb') as handle:
         pickle.dump(out, handle)
     runtime = time()-t0
     print 'Done: ',time()-t0,' s',multiprocessing.current_process()
-    with open('models/u-100k-fold-d%d-' % d +str(fold)+'runtime.out', 'wb') as handle:
+    with open(modelsPath+'/u-100k-fold-d%d-' % d +str(fold)+'runtime.out', 'wb') as handle:
         pickle.dump(runtime, handle)
 
-if __name__ == "__main__":
-    poolList = [(fold,d) for fold in range(5) for d in [5,15,25]]
+def train(modelsPath):
+    poolList = [(fold,d,modelsPath) for fold in range(5) for d in [5,15,25]]
     p=multiprocessing.Pool(4)
     p.map(niseRun,poolList)
-    niseRun(poolList[0])
+
+
+if __name__ == "__main__":
+    train('models')
