@@ -40,7 +40,7 @@ for  d_idx, d in enumerate(DIMS):
     plt.figure(num=2*d_idx, figsize=(5,5))
     for fold in range(NFOLDS):
         times = loadfile(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+\
-                         '-top%d-times.out'%topk)
+                         '-top%d-times.out'%TOPK)
         hours = np.array(times)/3600.0
         print 'pmf sum', hours.sum()
         totaltime = loadfile(MODELSFOLDER+'u-100k-fold-d%d-' % d +str(fold)+'runtime.out')
@@ -79,7 +79,7 @@ for d in DIMS:
     P = []
     for fold in range(NFOLDS):
         result = loadfile(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+\
-                          '-top%d-results.out'%topk)
+                          '-top%d-results.out'%TOPK)
         print len(result[0:-3])
         precisions = [r[2] for r in result[0:-3]]
         model_id = np.argmax(precisions)
@@ -98,7 +98,7 @@ for d in DIMS:
     pWeigh=[]
 
     for fold in range(NFOLDS):
-        with open(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+'-top%d-results.out'%topk, 'rb') as handle:
+        with open(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+'-top%d-results.out'%TOPK, 'rb') as handle:
             out = pickle.load(handle)
         #ordem: maioria, ponderado, best
         #print out[-1]
@@ -140,7 +140,7 @@ for d in DIMS:
     #plt.ylim((0,0.9))
     plt.xticks(range(1,NFOLDS+1),['Fold %d'%i for i in range(1,NFOLDS+1)])
     plt.title('Precision (d=%d)'%d)
-    plt.savefig(RESULTSFOLDER+'precisionat%d_bars_d%d.png'%(topk, d))
+    plt.savefig(RESULTSFOLDER+'precisionat%d_bars_d%d.png'%(TOPK, d))
 
 table = np.hstack((tables[0],tables[1]))
 table = np.vstack((table,table.mean(axis=0), table.std(axis=0)))
@@ -155,7 +155,7 @@ for d_i, d in enumerate(DIMS):
     vote = []
     weight = []
     for fold in range(NFOLDS):
-        out = loadfile(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+'-top%d-results.out'%topk)
+        out = loadfile(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+'-top%d-results.out'%TOPK)
         best += [out[-1][2]]
         vote += [out[-3][1]]
         weight += [out[-2][1]]
@@ -171,7 +171,7 @@ for d_i, d in enumerate(DIMS):
         plt.bar(i-0.4, data[i,:].mean(), label=labels[i], color=colors[i])
         plt.ylim((0.8,0.95))
     plt.xticks(range(3),labels)
-plt.savefig(RESULTSFOLDER+'precisionat%d_errorbars.png'%(topk))
+plt.savefig(RESULTSFOLDER+'precisionat%d_errorbars.png'%(TOPK))
 
 
 #%% Pareto plot
@@ -184,7 +184,7 @@ for d in DIMS:
     plotPareto(out,train)
     plt.title('NISE solutions (d=%d)'%d)
 
-    result = loadfile(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+'-top%d-results.out'%topk)
+    result = loadfile(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+'-top%d-results.out'%TOPK)
     precisions = [r[2] for r in result[0:-3]]
     model_id = np.argmax(precisions)
     alambda = result[model_id][1]
