@@ -29,10 +29,10 @@ RESULTSFOLDER="results/"
 TOPK = 5
 NFOLDS = 5
 DIMS = [5,15,25]
-E_ID = ENSMEBLE_ORDER
+E_ID = ENSEMBLE_ORDER
 
 # Colors for bar graphs
-color=['0.25','0.5','0.75']
+color=['0.1','0.25','0.5','0.7']
 #%% Training time plot and table
 table = []
 for  d_idx, d in enumerate(DIMS):
@@ -42,35 +42,34 @@ for  d_idx, d in enumerate(DIMS):
     for fold in range(NFOLDS):
         times = loadfile(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+\
                          '-top%d-times.out'%TOPK)
-        hours = np.array(times)/3600.0
-        print 'pmf sum', hours.sum()
+        minutes = np.array(times)/60.0
+        print 'pmf sum', minutes.sum()
         totaltime = loadfile(MODELSFOLDER+'u-100k-fold-d%d-' % d +str(fold)+'runtime.out')
-        print 'total nise', totaltime/3600.0
+        print 'total nise', totaltime/60.0
         numsol += [len(times)]
-        time += [totaltime/3600.0]
+        time += [totaltime/60.0]
         plt.subplot(np.ceil(NFOLDS/2.0), 2, fold+1)
-        plt.plot(hours, label='fold %d'%(fold+1))
+        plt.plot(minutes, label='fold %d'%(fold+1))
         plt.yticks(fontsize='small')
         plt.xticks(fontsize='small')
-        plt.ylabel('training time (h)', fontsize='x-small')
+        plt.ylabel('training time (min)', fontsize='x-small')
         plt.xlabel('NISE iterations', fontsize='x-small')
         plt.legend(loc='best', fontsize='small')
         if fold == 0:
-            plt.figure(num=2*d_idx+1, figsize=(5,2))
-            plt.plot(hours*60)
+            plt.figure(num=2*d_idx+1, figsize=(5,3))
+            plt.plot(minutes)
             plt.title('Fold %d, d=%d' % (fold+1, d), fontsize='small')
             plt.yticks(fontsize='small')
             plt.xticks(fontsize='small')
             plt.ylabel('convergence time (min)', fontsize='small')
             plt.xlabel('NISE iterations', fontsize='small')
             plt.savefig(RESULTSFOLDER+'time_fold%d_d%d.png'%(fold, d))
-            plt.figure(num=1)
-    plt.figure(num=2*d_idx, figsize=(5,5))
+            plt.figure(num=2*d_idx, figsize=(5,5))
     plt.tight_layout()
     plt.savefig(RESULTSFOLDER+'time_all_folds_d%d.png' % d)
     table += [time, numsol]
 
-np.savetxt(RESULTSFOLDER+'table_numsol_hours.txt', np.array(table).T,
+np.savetxt(RESULTSFOLDER+'table_numsol_minutes.txt', np.array(table).T,
            fmt='%0.1f', delimiter=' & ', newline='\\\\ \hline \n')
 
 #%% Lambda and CV precisions table
@@ -82,7 +81,7 @@ for d in DIMS:
         result = loadfile(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+\
                           '-top%d-results.out'%TOPK)
         print len(result[0:-3])
-        precisions = [r[2] for r in result[0:-3]]
+        precisions = [r[2] for r in result[0:-len(E_ID)]]
         model_id = np.argmax(precisions)
         L.append(result[model_id][1])
         P.append(precisions[model_id])
@@ -97,32 +96,37 @@ for d in DIMS:
     pBetter=[]
     pVote=[]
     pWeigh=[]
+    pFvote=[]
 
     for fold in range(NFOLDS):
         out = loadfile(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+'-top%d-results.out'%TOPK)
         #ordem: maioria, ponderado, best
         #print out[-1]
-        pBetter.append(out[-1][2])
-        pWeigh.append(out[-2][1])
-        pVote.append(out[-3][1])
+        pBetter.append(out[E_ID['best']][2])
+        pWeigh.append(out[E_ID['weighted']][1])
+        pVote.append(out[E_ID['vote']][1])
+        pFvote.append(out[E_ID['filtered']][1])
 
     print 'Friedman', friedmanchisquare(np.array(pBetter),
                              np.array(pWeigh),
-                             np.array(pVote))
+                             np.array(pVote),
+                             np.array(pFvote))
 
     print 'Precisions d=%d'%d
     Rprint = lambda alist :  ' = c(' + \
                            ", ".join([str(it) for it in alist]) + ')'
     folds = [i for i in range(NFOLDS)]*3
-    precisions = pBetter + pWeigh + pVote
-    ids = ["'best'"]*NFOLDS + ["'weight'"]*NFOLDS + ["'vote'"]*NFOLDS
+    precisions = pBetter + pWeigh + pVote + pFvote
+    ids = ["'best'"]*NFOLDS + ["'weight'"]*NFOLDS + \
+          ["'vote'"]*NFOLDS + ["'filtered'"]*NFOLDS
     print 'datafold', Rprint(folds)
     print 'precision', Rprint(precisions)
     print 'algo', Rprint(ids)
 
     tables.append(np.vstack((np.array(pBetter),
                              np.array(pWeigh),
-                             np.array(pVote) )).T)
+                             np.array(pVote),
+                             np.array(pFvote) )).T)
     x=np.arange(1,NFOLDS+1,1)
 
     y = [4, 9, 2,5,6]
@@ -130,10 +134,11 @@ for d in DIMS:
     k=[11,12,13,5,9]
     plt.figure()
     ax = plt.subplot(111)
-    w = 0.3
-    ax.bar(x-w, pVote,width=w,color=color[0],align='center', label='Vote')
-    ax.bar(x, pWeigh,width=w,color=color[1],align='center', label='Weighted')
-    ax.bar(x+w, pBetter,width=w,color=color[2],align='center', label='Best')
+    w = 0.2
+    ax.bar(x-2*w, pVote,width=w,color=color[0],align='center', label='Vote')
+    ax.bar(x-w, pFvote,width=w,color=color[1],align='center', label='Filtered')
+    ax.bar(x, pWeigh,width=w,color=color[2],align='center', label='Weighted')
+    ax.bar(x+w, pBetter,width=w,color=color[3],align='center', label='Best')
     ax.autoscale(tight=True)
     ax.legend(loc=4)
     plt.ylim((0.7,1.0))
@@ -149,28 +154,32 @@ np.savetxt(RESULTSFOLDER+'table_precisions.txt', table, fmt='%.4f', delimiter=' 
 
 
 #%% Average precision bar plots with error bars
-plt.figure()
+plt.figure(figsize=(10,6))
 for d_i, d in enumerate(DIMS):
     best = []
     vote = []
+    fvote = []
     weight = []
     for fold in range(NFOLDS):
         out = loadfile(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+'-top%d-results.out'%TOPK)
-        best += [out[-1][2]]
-        vote += [out[-3][1]]
-        weight += [out[-2][1]]
+        best += [out[E_ID['best']][2]]
+        vote += [out[E_ID['vote']][1]]
+        fvote += [out[E_ID['filtered']][1]]
+        weight += [out[E_ID['weighted']][1]]
 
 
-    data = np.array([vote,weight,best])
-    labels = ['Vote','Weighted','Best']
+    data = np.array([vote,fvote,weight,best])
+    labels = ['Vote','Filtered','Weighted','Best']
     colors = color
-    plt.subplot(1,3,d_i+1)
+    plt.subplot(1,len(DIMS),d_i+1)
     plt.title('Precision (d=%d)'%d)
-    for i in range(3):
+    w = 0.8
+    for i in range(data.shape[0]):
         plt.errorbar(i,data[i,:].mean(),data[i,:].std(),linewidth=2, color='k')
-        plt.bar(i-0.4, data[i,:].mean(), label=labels[i], color=colors[i])
+        plt.bar(i-w*0.5, data[i,:].mean(), width=w,
+                label=labels[i], color=colors[i])
         plt.ylim((0.8,0.95))
-    plt.xticks(range(3),labels)
+    plt.xticks(range(data.shape[0]),labels, fontsize='x-small')
 plt.savefig(RESULTSFOLDER+'precisionat%d_errorbars.png'%(TOPK))
 
 
