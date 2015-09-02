@@ -43,8 +43,9 @@ class FilteredMajority(Majority):
         id_performance = [(p, idx) for idx, p in enumerate(performances)]
         id_performance.sort()
         # Filter top 25% performances to generate RS_list
+        qtty = int(np.ceil(0.25*len(RS_list)))
         RS_list = [RS_list[idx]
-                   for p, idx in id_performance[-np.ceil(0.25*len(RS_list)):]]
+                   for p, idx in id_performance[-qtty:]]
         Majority.__init__(self, RS_list, threshold)
 
 
