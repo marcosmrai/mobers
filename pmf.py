@@ -196,14 +196,6 @@ def nise(ratings,nUsers,nItems,nSol=50,hVError=1,d=100,tol=10^-2,batchsize=None)
             sols+=1
     return out
 
-def plotPareto(list_,figpath=None):
-    plotL=np.array([i.objs for i in list_])
-    plt.plot(plotL[:,0],plotL[:,1],'ok')
-    plt.xlabel('MSE objective')
-    plt.ylabel('Regularization objective (Avg. L2 norm)')
-    if figpath != None:
-        plt.savefig(figpath)
-
 def niseRun(poolpar):
     fold,d,modelsPath=poolpar
     train,trainU,trainI,valid,validU,validI,test,testU,testI=fold_load('ml-100k',fold)

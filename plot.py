@@ -8,10 +8,8 @@ Created on Wed Jul 15 11:15:33 2015
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import friedmanchisquare
-from pmf import mf, plotPareto
+from pmf import mf
 from evaluation import ENSEMBLE_ORDER
-from dbread import fold_load
-import os
 from pickle import load, dump
 
 def loadfile(fname):
@@ -191,6 +189,15 @@ def avg_precision_plot():
             plt.ylim((0.8,0.95))
         plt.xticks(range(data.shape[0]),labels, fontsize='x-small')
     plt.savefig(RESULTSFOLDER+'precisionat%d_errorbars.png'%(TOPK))
+
+
+def plotPareto(list_,figpath=None):
+    plotL=np.array([i.objs for i in list_])
+    plt.plot(plotL[:,0],plotL[:,1],'ok')
+    plt.xlabel('MSE objective')
+    plt.ylabel('Regularization objective (Avg. L2 norm)')
+    if figpath != None:
+        plt.savefig(figpath)
 
 def _single_annotated_pareto(d):
     '''
