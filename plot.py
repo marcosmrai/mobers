@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import friedmanchisquare
 from pmf import mf
-from evaluation import ENSEMBLE_ORDER
+from evaluation import ENSEMBLE_ORDER, METRIC_ID
 from pickle import load, dump
 
 def loadfile(fname):
@@ -26,9 +26,9 @@ MODELSFOLDER="models/"
 RESULTSFOLDER="results/"
 TOPK = 5
 NFOLDS = 5
-DIMS = [5,15,25]
+DIMS = [5,15,25,50,100]
 E_ID = ENSEMBLE_ORDER
-
+M_ID = METRIC_ID
 # Colors for bar graphs
 COLORS=[str(x) for x in np.logspace(-0.8,-0.15,len(E_ID))]
 
@@ -159,11 +159,12 @@ def precision_plot_table():
     np.savetxt(RESULTSFOLDER+'table_precisions.txt', table, fmt='%.4f', delimiter=' & ', newline='\\\\ \hline \n')
 
 
-def avg_precision_plot():
+def avg_precision_plot(metric='p'):
     '''
     Average precision bar plots with error bars
     '''
-    plt.figure(figsize=(10,6))
+    M = metric
+    plt.figure(figsize=(16,5))
     for d_i, d in enumerate(DIMS):
         best = []
         vote = []
@@ -171,24 +172,31 @@ def avg_precision_plot():
         weight = []
         for fold in range(NFOLDS):
             out = loadfile(RESULTSFOLDER+'u-100k-fold-'+str(d)+'-d'+str(fold)+'-top%d-results.out'%TOPK)
-            best += [out[E_ID['best']][2]]
-            vote += [out[E_ID['vote']][1]]
-            fvote += [out[E_ID['filtered']][1]]
-            weight += [out[E_ID['weighted']][1]]
+            best += [out[E_ID['best']][M_ID[M]+1]]
+            vote += [out[E_ID['vote']][M_ID[M]]]
+            fvote += [out[E_ID['filtered']][M_ID[M]]]
+            weight += [out[E_ID['weighted']][M_ID[M]]]
 
 
         data = np.array([vote,fvote,weight,best])
         labels = ['Vote','Filtered','Weighted','Best']
         plt.subplot(1,len(DIMS),d_i+1)
-        plt.title('Precision (d=%d)'%d)
+        if M=='p': title = 'Precision'
+        elif M=='r': title = 'Recall'
+        title += ' (d=%d)'%d
+        plt.title(title)
         w = 0.8
         for i in range(data.shape[0]):
             plt.errorbar(i,data[i,:].mean(),data[i,:].std(),linewidth=2, color='k')
             plt.bar(i-w*0.5, data[i,:].mean(), width=w,
                     label=labels[i], color=COLORS[i])
-            plt.ylim((0.8,0.95))
-        plt.xticks(range(data.shape[0]),labels, fontsize='x-small')
-    plt.savefig(RESULTSFOLDER+'precisionat%d_errorbars.png'%(TOPK))
+            if M == 'p': plt.ylim((0.8,0.95))
+            elif M == 'r' : plt.ylim((0.35,0.5))
+        plt.xticks(range(data.shape[0]),labels, fontsize='small')
+    plt.tight_layout()
+    if M=='p': figname = 'precisionat%d_errorbars.png'%(TOPK)
+    elif M=='r': figname = 'recallat%d_errorbars.png'%(TOPK)
+    plt.savefig(RESULTSFOLDER+figname)
 
 
 def plotPareto(list_,figpath=None):

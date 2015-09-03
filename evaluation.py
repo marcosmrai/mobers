@@ -28,7 +28,7 @@ NPROC = 1 # if >1, will create a pool with NPROC workers
 
 
 ENSEMBLE_ORDER = {'vote': -4, 'filtered': -3, 'weighted': -2,  'best': -1}
-
+METRIC_ID = {'p':1, 'r':2}
 
 class Evaluation(object):
     '''
@@ -243,6 +243,68 @@ def performance(k, d, topk=5):
     with open(result_folder+'u-100k-fold-%d-d%d-top%d-results.out' % (d, k, topk), 'wb') as f:
         dump(result, f)
 
+def ensembles_performance(k, d, topk=5):
+    '''
+    k: fold index
+    d: latent dimensionality of pmf model
+    topk: size of recomendation list
+    '''
+
+    print 'fold %d, dim %d, top %d list' % (k, d, topk)
+
+    # returns train, valid, test
+    with open(MODELFOLDER + '/u-100k-fold-d%d-%d.out' % (d, k), 'rb') as f:
+        pmf_list = load(f)
+        #pmf_list = pmf_list[:3]
+    train, trainU, trainI, valid, validU, validI, test, testU, testI = \
+        fold_load('ml-100k',k)
+
+    with open('ml-100k/fold%d-hidden.pickle'%k, 'rb') as f:
+        hidden_v = load(f)
+    with open('ml-100k/test-hidden.pickle', 'rb') as f:
+        hidden_t = load(f)
+
+    print 'loaded pmf_list'
+
+    RS_list = []
+    for mf_id, pmf in enumerate(pmf_list):
+        RS_list.append(Recommender(item_MF=pmf.items))
+    print 'RS_list created'
+    n_items = RS_list[0].n_items
+
+    with open(RESULTFOLDER+'u-100k-fold-%d-d%d-top%d-results.out' % (d, k, topk), 'rb') as f:
+        result = load(f)
+
+    result = result[0:len(RS_list)]
+    # ensembles
+    # If order is changed, please adjust ENSMEBLE_ORDER constant
+    E1 = Majority(RS_list, threshold=3)
+    precisions = [line[2] for line in result]
+    E1f = FilteredMajority(RS_list, performances=precisions, threshold=3)
+    E2 = WeightedVote(RS_list, weights=precisions, threshold=3)
+    best_RS = np.argmax(precisions)
+    E3 = RS_list[best_RS]
+    evalu_ensemble = [Evaluation(RS=E1, topk=topk),
+                      Evaluation(RS=E1f, topk=topk),
+                      Evaluation(RS=E2, topk=topk),
+                      Evaluation(RS=E3, topk=topk)]
+    print 'ensembles created'
+
+    for e_id, evaluator in enumerate(evalu_ensemble):
+        P, R = eval_users(test, hidden_t, evaluator, n_items)
+        P = np.mean(P)
+        R = np.mean(R)
+
+        result.append([d, P, R])
+        print '!!!concluded E', e_id, 'PR', P, R
+
+    result[-1].insert(1, pmf_list[best_RS].lambdaa)
+
+    print 'saving results'
+
+    with open(RESULTFOLDER+'u-100k-fold-%d-d%d-top%d-results.out' % (d, k, topk), 'wb') as f:
+        dump(result, f)
+
 def pool_performance(tup):
     k, d, topk = tup
     performance(k=k, d=d, topk=topk)
@@ -251,8 +313,8 @@ if __name__ == '__main__':
     if GEN_HIDDEN_ITEMS:
         save_test_items(PCTHIDDEN, THRESHOLD)
     pool_args = [(k, d, topk)
-                 for d in DIMLIST
                  for k in range(NFOLDS)
+                 for d in DIMLIST
                  for topk in TOPKLIST]
     if NPROC > 1:
         p = Pool(1)
