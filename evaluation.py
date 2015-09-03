@@ -4,6 +4,7 @@ Evaluation module
 import numpy as np
 from numpy.random import choice
 from ensemble import Majority, WeightedVote, FilteredMajority
+import dbread
 from dbread import fold_load
 from recommend import Recommender
 from pmf import mf
@@ -16,7 +17,7 @@ GLOBAL PARAMETERS
 Parameter of the main script
 '''
 NFOLDS = 5
-DIMLIST = [5, 15, 25]
+DIMLIST = [5, 15, 25, 50, 100]
 TOPKLIST = [5]
 PCTHIDDEN = 0.2
 THRESHOLD = 3
@@ -123,6 +124,12 @@ def eval_users(test, hidden, evaluator, n_items):
 
 
 def get_hidden_items(u_positives, u_negatives, pct_hidden):
+    popular = dbread.loadFreqItems('ml-100k')
+    remove_popular = lambda alist: \
+                     [item for item in alist
+                      if item not in popular]
+    u_positives = remove_popular(u_positives)
+    u_negatives = remove_popular(u_negatives)
     # Hide some items to check on them later
     random_pick = lambda(aList): list(
                choice(aList,
@@ -136,6 +143,8 @@ def save_test_items(pct_hidden = 0.2, threshold=3):
     '''
     Saves a set of hidden items for each user in the validation and test set
     '''
+
+
     for k in range(NFOLDS):
         # Load fold k
         train, trainU, trainI, valid, validU, validI, test, testU, testI = \
@@ -155,6 +164,7 @@ def save_test_items(pct_hidden = 0.2, threshold=3):
     for user in user_vectors:
         u_positives, u_negatives = \
             split_positive_negative(user_vectors[user], threshold)
+
         hidden[user] = get_hidden_items(u_positives, u_negatives, pct_hidden)
         with open('ml-100k/test-hidden.pickle', 'wb') as f:
             dump(hidden, f)
@@ -241,8 +251,8 @@ if __name__ == '__main__':
     if GEN_HIDDEN_ITEMS:
         save_test_items(PCTHIDDEN, THRESHOLD)
     pool_args = [(k, d, topk)
-                 for k in range(NFOLDS)
                  for d in DIMLIST
+                 for k in range(NFOLDS)
                  for topk in TOPKLIST]
     if NPROC > 1:
         p = Pool(1)
