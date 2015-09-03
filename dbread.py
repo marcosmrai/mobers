@@ -100,7 +100,6 @@ def twoxk(folder,filename,finfo,k,rate=0.1):
         print 'Card Testing (u/i/r)', testU, testI, len(test)
         print '\n\n'
 
-
 def kfold(folder,filename,finfo,k,rate=0.1):
   ratings=read_ratings(filename)
   # read the infos about the data
@@ -150,6 +149,26 @@ def kfold(folder,filename,finfo,k,rate=0.1):
         #save the data
         pickle.dump((train,trainU,trainI,valid,validU,validI,test,testU,testI), handle)
 
+def freqItems(folder,filename,finfo):
+  ratings=read_ratings(filename)
+  # read the infos about the data
+  with open(finfo, 'r') as f:
+    nUsers=int(f.readline().split(' ')[0])
+    nItems=int(f.readline().split(' ')[0])
+
+    nEachItem = np.zeros(nItems)
+    for rating in ratings:
+        nEachItem[rating[1]]+=1
+    relevantItems = np.argsort(nEachItem).tolist()
+    nEachItem = np.sort(nEachItem).tolist()
+    itemFreq = [dupla for dupla in zip(relevantItems,nEachItem)]
+    with open(folder+'/itemfreq.pickle', 'wb') as handle:
+        pickle.dump(itemFreq, handle)
+
+def loadFreqItems(folder):
+  with open(folder+'/itemfreq.pickle', 'rb') as handle:
+     itemFreq=pickle.load(handle)
+  return itemFreq
 
 
 def fold_load(folder,fold):
@@ -161,4 +180,6 @@ def datagen(ifolder):
   kfold(ifolder,ifolder+'/u.data',ifolder+'/u.info',5)
 
 if __name__=='__main__':
-  kfold('ml-100k','ml-100k/u.data','ml-100k/u.info',5)
+  #kfold('ml-100k','ml-100k/u.data','ml-100k/u.info',5)
+  freqItems('ml-100k','ml-100k/u.data','ml-100k/u.info')
+  print loadFreqItems('ml-100k')
